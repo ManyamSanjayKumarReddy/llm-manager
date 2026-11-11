@@ -1,0 +1,108 @@
+/* Models list and its popups (add, manage). */
+
+/* list header: search on the left, the main action on the right; stacks on a phone */
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.list-head .search { flex: 1 1 260px; max-width: 420px; }
+.list-head > .btn { flex: none; }
+@media (max-width: 520px) { .list-head .search { max-width: none; } .list-head > .btn { flex: 1 1 100%; } }
+
+/* a model row: the name is one big button, so the whole row is easy to hit */
+.row-link { display: grid; gap: 2px; text-align: left; background: none; border: 0; padding: 4px 0; cursor: pointer; color: inherit; max-width: 100%; }
+.row-link strong { font-size: 16px; }
+.row-link .mono { overflow-wrap: anywhere; white-space: normal; }
+.row-link:hover strong { color: var(--tide); }
+tbody tr:has(.row-link) { cursor: default; }
+
+/* stepper: one cell per step; on a phone only the current step shows its name */
+.stepper { list-style: none; margin: 16px 0 0; padding: 0 24px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; flex: none; }
+.stepper li { border-bottom: 2px solid var(--hair); color: var(--faint); font-size: 13px; min-width: 0; }
+.stepper li[aria-current="step"] { border-bottom-color: var(--tide); color: var(--bone); }
+.stepper li.done { border-bottom-color: rgba(139, 243, 230, 0.5); color: var(--dim); }
+.step-btn { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; background: none; border: 0; color: inherit; font: inherit; min-width: 0; width: 100%; text-align: left; }
+button.step-btn { cursor: pointer; }
+button.step-btn:hover .step-label { color: var(--bone); }
+.stepper .dot { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--hair-strong); font: 11px var(--font-mono); }
+.stepper li[aria-current="step"] .dot { background: var(--grad-brand, var(--tide)); border-color: transparent; color: #04121c; font-weight: 700; }
+.stepper li.done .dot { background: rgba(139, 243, 230, 0.15); border-color: rgba(139, 243, 230, 0.5); color: var(--foam); }
+.step-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .stepper { display: flex; padding: 0 16px; gap: 4px; }
+  .stepper li { flex: 1 1 0; }
+  .stepper li[aria-current="step"] { flex: 4 1 0; }
+  .stepper li:not([aria-current="step"]) .step-label { display: none; }
+  .step-btn { justify-content: flex-start; }
+}
+
+/* a row of quick picks with the number box beside them */
+.preset-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.num-input { width: 110px; padding: 8px 12px; }
+.link-btn { border-color: transparent; color: var(--dim); justify-self: start; }
+.link-btn:hover { color: var(--bone); background: transparent; border-color: transparent; }
+
+/* groups of fields inside a popup */
+.group { display: grid; gap: 12px; }
+.group header { display: grid; gap: 2px; }
+.group h3 { font: 600 13px var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--tide); }
+.group header .dim { font-size: 14px; }
+.group-body { display: grid; gap: 14px; min-width: 0; }
+.group + .group { padding-top: 18px; border-top: 1px solid var(--hair); }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.narrow-input { max-width: 140px; }
+.input-group { display: flex; gap: 8px; align-items: stretch; }
+.input-group .input { flex: 1; }
+.hint { font-size: 13px; line-height: 1.5; }
+.small-text { font-size: 12px; }
+
+.advanced { border: 1px solid var(--hair); border-radius: var(--radius-sm); }
+.advanced summary { cursor: pointer; padding: 14px 16px; list-style: none; display: flex; justify-content: space-between; align-items: center; font: 12px var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); }
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced summary::after { content: "+"; color: var(--tide); font-size: 18px; line-height: 1; transition: transform 0.3s var(--ease); }
+.advanced[open] summary::after { transform: rotate(45deg); }
+.advanced-body { display: grid; gap: 14px; padding: 0 16px 16px; }
+.input[aria-invalid="true"] { border-color: var(--rose); }
+
+/* the manage popup */
+.summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.02); }
+.summary .right { margin-left: auto; }
+fieldset.locked { border: 1px dashed var(--hair-strong); border-radius: var(--radius-sm); padding: 14px; margin: 0; display: grid; gap: 14px; min-width: 0; }
+fieldset.locked:disabled { opacity: 0.5; }
+.confirm-text { margin: 0; flex: 1 1 240px; font-size: 14px; }
+.modal-foot .btn.spacer { margin-right: auto; }
+.modal-foot .alert { margin-right: auto; flex: 1 1 200px; padding: 8px 12px; font-size: 13px; }
+
+/* quick picks */
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn { cursor: pointer; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--hair-strong); background: transparent; color: var(--dim); font-size: 13px; transition: all 0.2s; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.chip-btn:hover { color: var(--bone); border-color: rgba(255, 255, 255, 0.34); }
+.chip-btn[aria-pressed="true"] { color: #04121c; border-color: transparent; background: var(--grad-brand, var(--tide)); font-weight: 600; }
+
+/* switch */
+.switch { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; cursor: pointer; position: relative; }
+.switch input { position: absolute; opacity: 0; width: 44px; height: 26px; margin: 0; cursor: pointer; }
+.switch .track { width: 44px; height: 26px; border-radius: 999px; background: var(--hair-strong); position: relative; transition: background 0.25s; flex: none; }
+.switch .track i { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--bone); transition: transform 0.25s var(--ease); }
+.switch input:checked + .track { background: var(--grad-brand, var(--tide)); }
+.switch input:checked + .track i { transform: translateX(18px); background: #04121c; }
+.switch input:focus-visible + .track { outline: 2px solid var(--tide); outline-offset: 2px; }
+.switch-text { display: grid; gap: 2px; font-size: 14px; }
+.switch-text .dim { font-size: 13px; }
+.range { width: 100%; accent-color: var(--tide); height: 28px; cursor: pointer; }
+
+.callout { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 14px; border: 1px solid rgba(70, 183, 255, 0.35); background: linear-gradient(135deg, rgba(70, 183, 255, 0.1), rgba(46, 125, 255, 0.05)); }
+.callout.warn { border-color: rgba(255, 184, 77, 0.4); background: linear-gradient(135deg, rgba(255, 184, 77, 0.1), rgba(255, 184, 77, 0.03)); }
+
+/* the command */
+.command-panel { display: grid; gap: 10px; min-width: 0; }
+.command-bar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; }
+.command-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.command-tools .btn[aria-pressed="true"]:not(.primary) { background: rgba(70, 183, 255, 0.14); border-color: var(--tide); }
+.legend { display: inline-flex; align-items: center; gap: 8px; font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+.swatch { width: 4px; height: 16px; border-radius: 2px; background: var(--grad-brand, var(--tide)); }
+.command-panel .command { margin: 0; padding: 14px 0; max-height: none; overflow-x: auto; overflow-y: visible; min-height: 0; }
+.command-panel .cmd-line { display: block; padding: 1px 16px; border-left: 3px solid transparent; }
+.command-panel .cmd-line.router { border-left-color: var(--tide); background: linear-gradient(90deg, rgba(70, 183, 255, 0.14), transparent 80%); }
+.command-panel .cmd-line code { font: inherit; color: inherit; }
+.cmd-note { margin-left: 14px; font-style: normal; color: var(--faint); }
+.command.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.command.wrap .cmd-line { text-indent: -2ch; padding-left: calc(16px + 2ch); }
+@media (max-width: 640px) { .cmd-note { display: block; margin: 0 0 2px; } .command-panel .command { font-size: 12px; } }

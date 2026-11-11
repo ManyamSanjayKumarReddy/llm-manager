@@ -1,0 +1,79 @@
+[project]
+name = "llm-manager"
+version = "0.1.0"
+description = "Wake-on-demand router for vLLM models sharing GPUs, with an authenticated dashboard"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aerich>=0.10.1",
+    "argon2-cffi>=25.1.0",
+    "fastapi>=0.162.4",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.3",
+    "pydantic-settings>=2.16.2",
+    "tortoise-orm[asyncpg]>=1.1.9",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+llm-manager = "llm_manager.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm_manager"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+    "ruff>=0.17.4",
+]
+
+[tool.aerich]
+tortoise_orm = "llm_manager.db.config.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "./src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "S", "ASYNC",
+    "BLE", "T20", "PT", "RUF", "PERF", "TRY", "D",
+]
+ignore = [
+    "D203", "D213",   # conflicting docstring styles: D211 + D212 are used
+    "D107",           # __init__ docstring: the class docstring covers it
+    "TRY003",         # descriptive messages inline are fine
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S311", "S603", "S607", "D"]
+"src/llm_manager/cli.py" = ["T20"]
+"migrations/**" = ["D", "E501", "RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["aerich.*", "tortoise.*", "asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

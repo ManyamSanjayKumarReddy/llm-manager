@@ -1,0 +1,102 @@
+/* Things that make every screen behave on small displays, plus the popup structure. */
+
+/* Grid and flex children must be allowed to shrink below their content, or one wide table makes the
+   whole page scroll sideways. */
+.page > *, .stack > *, .surface, .add-form, .toolbar > * { min-width: 0; }
+.table-wrap { max-width: 100%; }
+
+.icon { flex: none; vertical-align: -0.22em; }
+.btn { white-space: nowrap; }
+.icon-btn { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid transparent; background: transparent; color: var(--dim); cursor: pointer; transition: all 0.2s; flex: none; }
+.icon-btn:hover { color: var(--bone); background: rgba(255, 255, 255, 0.07); }
+.back-link { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }
+.page-btn { display: inline-grid; place-items: center; }
+.empty p { max-width: 46ch; }
+.empty-action { margin-top: 10px; }
+.empty-action .btn { display: inline-flex; }
+
+/* ---- tables become cards on phones: each row is a card, each cell shows its own label ---- */
+@media (max-width: 720px) {
+  .table-wrap { margin: 0; padding: 0; overflow: visible; }
+  table.cards, table.cards tbody { display: block; }
+  table.cards thead { display: none; }
+  table.cards tr { display: grid; gap: 10px; padding: 14px; margin-bottom: 10px; border: 1px solid var(--hair); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.02); }
+  table.cards tr:hover { background: rgba(255, 255, 255, 0.03); }
+  table.cards td { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0; border: 0; white-space: normal; text-align: right; }
+  table.cards td::before { content: attr(data-label); flex: none; font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); text-align: left; }
+  table.cards td[data-label=""] { justify-content: flex-end; }
+  table.cards td[data-label=""]::before { content: none; }
+  table.cards td.primary { display: block; text-align: left; }
+  table.cards td.primary::before { content: none; }
+  table.cards td.r, table.cards th.r { text-align: right; }
+}
+
+/* ---- popups ---- */
+dialog { padding: 0; max-width: calc(100vw - 24px); }
+/* small confirm-style popups: the form itself carries the padding */
+dialog:not(.modal-lg) > form { padding: 24px; }
+/* large popups: header, scrolling body and footer stack inside the form (or the dialog itself) */
+/* One fixed size for every step, so the popup never jumps; the middle part scrolls. */
+dialog.modal-lg { width: min(780px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 40px)); }
+dialog.modal-lg[open] { display: flex; flex-direction: column; }
+dialog.modal-lg > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; }
+.modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 24px 0; flex: none; }
+.modal-head h2 { font-size: 24px; }
+.modal-body { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 22px 24px; display: grid; gap: 20px; align-content: start; min-height: 0; margin-top: 14px;
+  scrollbar-width: thin; scrollbar-color: var(--hair-strong) transparent; scrollbar-gutter: stable;
+  /* soft fades at the top and bottom edge that only show when there is more to scroll to */
+  background:
+    linear-gradient(var(--panel) 30%, transparent) center top / 100% 36px no-repeat local,
+    linear-gradient(transparent, var(--panel) 70%) center bottom / 100% 36px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.55), transparent) center top / 100% 14px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.55), transparent) center bottom / 100% 14px no-repeat scroll; }
+.modal-body::-webkit-scrollbar { width: 10px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--hair-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+.modal-body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); background-clip: content-box; }
+.modal-body > * { min-width: 0; }
+.modal-foot { flex: none; display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; padding: 16px 24px; border-top: 1px solid var(--hair); background: rgba(255, 255, 255, 0.02); }
+.modal-foot .spacer { margin-right: auto; }
+.foot-hint { margin-right: auto; flex: 1 1 200px; color: var(--dim); font-size: 13px; }
+@media (max-width: 640px) {
+  dialog.modal-lg { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; }
+  .modal-head { padding: 16px 16px 0; }
+  .modal-body { padding: 16px; }
+  .modal-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .modal-foot .btn { flex: 1 1 auto; }
+  dialog:not(.modal-lg) { width: calc(100vw - 24px); }
+  dialog:not(.modal-lg) > form { padding: 18px; }
+}
+
+/* the last step of the Add popup: everything stays in view and only the command scrolls inside its own box */
+.modal-body.fit { display: flex; flex-direction: column; gap: 16px; background: none; }
+.modal-body.fit > .group { flex: none; }
+.modal-body.fit > .group.grow { flex: 1 1 auto; min-height: 300px; display: flex; flex-direction: column; }
+.modal-body.fit > .group + .group { padding-top: 14px; }
+.group.grow > .group-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.group.grow .command-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.group.grow .command-panel .command { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--hair-strong) transparent; }
+
+/* ---- one header geometry everywhere, so the logo never moves between the landing page, sign-in and dashboard ---- */
+.shell-bar, .landing-nav, .login-top { padding-inline: var(--bar-pad); min-height: var(--bar-h); }
+.landing-nav, .login-top { padding-block: 0; align-items: center; display: flex; height: var(--bar-h); }
+.landing-nav { gap: 24px; }
+
+/* inside the command box: a soft edge at the top or bottom shows there are more lines to scroll to */
+.group.grow .command-panel .command {
+  background-color: var(--ink);
+  background-image:
+    linear-gradient(var(--ink) 30%, transparent),
+    linear-gradient(transparent, var(--ink) 70%),
+    radial-gradient(farthest-side at 50% 0, rgba(70, 183, 255, 0.28), transparent),
+    radial-gradient(farthest-side at 50% 100%, rgba(70, 183, 255, 0.28), transparent);
+  background-position: center top, center bottom, center top, center bottom;
+  background-size: 100% 32px, 100% 32px, 100% 14px, 100% 14px;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.skeleton { height: 160px; border-radius: var(--radius-sm); background: linear-gradient(100deg, rgba(255, 255, 255, 0.03) 30%, rgba(255, 255, 255, 0.07) 50%, rgba(255, 255, 255, 0.03) 70%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* decorative glows must never widen the page */
+.page, .landing, .login { overflow-x: clip; }

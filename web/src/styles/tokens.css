@@ -1,0 +1,33 @@
+/* Palette and type are borrowed from the "ink + tide" look: near-black ground, bone text,
+   one cool accent. Everything else in the UI is built from these tokens. */
+:root {
+  --ink: #07080a;
+  --ink-2: #0b0d10;
+  --panel: #101318;
+  --panel-2: #151922;
+  --bone: #f3f5f8;
+  --dim: #98a1ae;
+  --faint: #5b636e;
+  --hair: rgba(255, 255, 255, 0.08);
+  --hair-strong: rgba(255, 255, 255, 0.16);
+
+  --tide: #46b7ff;
+  --deep: #2e7dff;
+  --foam: #8bf3e6;
+  --lime: #c0e03c;
+  --amber: #ffb84d;
+  --rose: #ff6b8b;
+
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Inter Variable", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 24px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --header-h: 64px;
+  --bar-h: 64px;                          /* height of every top bar */
+  --bar-pad: clamp(16px, 3vw, 40px);      /* side padding of every top bar: keeps the logo in one place */
+  color-scheme: dark;
+}

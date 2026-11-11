@@ -1,0 +1,35 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--ink); -webkit-text-size-adjust: 100%; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+body {
+  margin: 0; min-height: 100vh; overflow-x: clip;
+  background: var(--ink); color: var(--bone);
+  font: 15px/1.55 var(--font-sans); -webkit-font-smoothing: antialiased;
+}
+::selection { background: rgba(70, 183, 255, 0.28); }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; }
+a { color: var(--tide); text-decoration: none; }
+.prose a { text-decoration: underline; text-underline-offset: 3px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--tide); outline-offset: 2px; border-radius: 6px; }
+.notice { padding: 16px; }
+[hidden] { display: none !important; }
+.mono { font-family: var(--font-mono); }
+.dim { color: var(--dim); }
+.num { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* scroll-in */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); transition-delay: var(--d, 0ms); }
+.reveal.in { opacity: 1; transform: none; }
+/* backwards only: a finished animation must not leave a transform behind (it would trap fixed children) */
+.page { animation: page-in 0.5s var(--ease) backwards; }
+@keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  .reveal { opacity: 1; transform: none; }
+}

@@ -1,0 +1,65 @@
+/* Gradient fills. One palette throughout: foam (teal) -> tide (sky) -> deep (blue), with amber and rose
+   only for warnings. Loaded last so these refine the base components rather than replace them. */
+:root {
+  --grad-brand: linear-gradient(135deg, #8bf3e6 0%, #46b7ff 55%, #2e7dff 100%);
+  --grad-brand-soft: linear-gradient(135deg, rgba(139, 243, 230, 0.16), rgba(46, 125, 255, 0.16));
+  --grad-text: linear-gradient(100deg, #8bf3e6, #46b7ff 55%, #2e7dff);
+  --grad-title: linear-gradient(180deg, #ffffff 30%, #9fb4cc 130%);
+}
+
+/* buttons */
+.btn.primary { background: var(--grad-brand); border-color: transparent; color: #04121c; font-weight: 600; background-size: 140% 140%; background-position: 0% 50%; }
+.btn.primary:hover { background: var(--grad-brand); background-position: 100% 50%; box-shadow: 0 0 0 4px rgba(70, 183, 255, 0.2), 0 12px 36px -10px rgba(70, 183, 255, 0.75); }
+.btn.danger:hover { background: linear-gradient(135deg, rgba(255, 107, 139, 0.18), rgba(255, 184, 77, 0.1)); }
+
+/* navigation, tabs, pages */
+.nav-item[aria-current="page"] { background: var(--grad-brand); color: #04121c; font-weight: 600; }
+.segmented button[aria-pressed="true"], .code-tabs [role="tab"][aria-selected="true"] { background: var(--grad-brand); color: #04121c; font-weight: 600; }
+.page-btn[aria-current="page"] { background: var(--grad-brand); color: #04121c; border-color: transparent; font-weight: 600; }
+.chip-check input:checked + span { background: var(--grad-brand-soft); border-color: rgba(70, 183, 255, 0.7); }
+
+/* page titles: white fading to steel, so the big type has depth */
+.page-head h1 { background: var(--grad-title); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.page-head { position: relative; }
+.page-head::before { content: ""; position: absolute; z-index: -1; top: -90px; left: -40px; width: min(520px, 100%); height: 300px; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(46, 125, 255, 0.2), transparent); filter: blur(10px); }
+
+/* cards: a faint wash from the top-left corner, stronger on the live ones */
+.surface { background: radial-gradient(120% 100% at 0% 0%, rgba(70, 183, 255, 0.07), transparent 55%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.model.is-awake { background: radial-gradient(120% 110% at 0% 0%, rgba(139, 243, 230, 0.16), transparent 60%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.demo-row.on { background: linear-gradient(135deg, rgba(139, 243, 230, 0.14), rgba(46, 125, 255, 0.07)); }
+.gpu.used { background: linear-gradient(135deg, rgba(139, 243, 230, 0.12), rgba(46, 125, 255, 0.06)); }
+
+/* overview figures: each tile gets its own colour, and the numbers are filled too */
+.stats .stat:nth-child(1) { background: radial-gradient(110% 120% at 0% 0%, rgba(139, 243, 230, 0.2), transparent 62%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.stats .stat:nth-child(2) { background: radial-gradient(110% 120% at 0% 0%, rgba(70, 183, 255, 0.2), transparent 62%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.stats .stat:nth-child(3) { background: radial-gradient(110% 120% at 0% 0%, rgba(46, 125, 255, 0.24), transparent 62%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.stats .stat:nth-child(4) { background: radial-gradient(110% 120% at 0% 0%, rgba(255, 184, 77, 0.16), transparent 62%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.stat .value { background: var(--grad-title); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* small fills */
+.avatar, .step-no, .prio { background: var(--grad-brand); }
+.icon-tile { background: var(--grad-brand-soft); border-color: rgba(70, 183, 255, 0.35); color: #bff6ff; }
+.big-no { background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; }
+.bar > i { background: var(--grad-brand); }
+.meter-row i.full { background: linear-gradient(90deg, var(--rose), var(--amber)); }
+.pill.awake, .pill.ok { background: linear-gradient(135deg, rgba(139, 243, 230, 0.16), rgba(70, 183, 255, 0.08)); }
+.pill.waking, .pill.sleeping, .pill.warn { background: linear-gradient(135deg, rgba(255, 184, 77, 0.16), rgba(255, 184, 77, 0.04)); }
+.pill.failed, .pill.down, .pill.bad { background: linear-gradient(135deg, rgba(255, 107, 139, 0.16), rgba(255, 107, 139, 0.04)); }
+.token-box { background: linear-gradient(135deg, rgba(139, 243, 230, 0.08), rgba(46, 125, 255, 0.1)); }
+
+/* landing */
+.landing-glow { background: radial-gradient(38% 45% at 18% 25%, rgba(46, 125, 255, 0.32), transparent 70%),
+  radial-gradient(34% 40% at 82% 15%, rgba(139, 243, 230, 0.22), transparent 70%),
+  radial-gradient(30% 30% at 55% 60%, rgba(120, 90, 255, 0.14), transparent 70%); }
+.section .display em, .closing .display em { font-style: normal; background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.section .display { background: var(--grad-title); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.section .display em { background: var(--grad-text); -webkit-background-clip: text; background-clip: text; }
+.closing-card { background: radial-gradient(70% 100% at 50% 0%, rgba(70, 183, 255, 0.32), transparent 68%),
+  radial-gradient(50% 80% at 0% 100%, rgba(139, 243, 230, 0.14), transparent 70%),
+  radial-gradient(50% 80% at 100% 100%, rgba(46, 125, 255, 0.18), transparent 70%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.compare-card.glow { background: radial-gradient(120% 100% at 0% 0%, rgba(139, 243, 230, 0.16), transparent 60%), linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.facts-row strong { background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* login */
+.login-card { background: radial-gradient(100% 70% at 0% 0%, rgba(70, 183, 255, 0.14), transparent 60%), linear-gradient(180deg, var(--panel-2), var(--panel)); }

@@ -1,0 +1,23 @@
+# secrets and local settings
+.env
+.env.*
+!.env.example
+certs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# web
+node_modules/
+dist/
+
+# editors and OS
+.idea/
+.vscode/
+.DS_Store
+*.log
