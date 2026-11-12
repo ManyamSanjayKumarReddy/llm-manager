@@ -21,3 +21,6 @@ dist/
 .vscode/
 .DS_Store
 *.log
+
+# lock file is not committed
+package-lock.json

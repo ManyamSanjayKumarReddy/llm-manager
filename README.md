@@ -51,7 +51,7 @@ uv run aerich upgrade
 uv run llm-manager create-user --username you --role admin    # first admin; nobody can sign up
 
 # 4. dashboard
-cd ../web && npm ci && npm run build
+cd ../web && npm install && npm run build
 
 # 5. start (self-signed certificate, or put your own in certs/)
 cd .. && scripts/make-cert.sh <hostname>
