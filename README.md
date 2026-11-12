@@ -24,6 +24,9 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 - **Priority:** when models sharing a GPU both have requests waiting, the higher number goes first. A lower-priority
   model never interrupts a higher one that is serving or served within `PRIORITY_HOLD_S`.
 - Every model sleeps after its own idle time, whatever its priority.
+- **Preemption (off by default):** a running request is normally never stopped. With `PREEMPT_AFTER_S=30`, a request that has
+  waited 30 s for a model with a **lower** priority stops that model's running requests (they get `503` + `Retry-After`;
+  streams end with an error event) and takes the GPU. Equal or higher priorities are never stopped. Keep it below `QUEUE_TIMEOUT_S`.
 - Failure to wake or a wait over `QUEUE_TIMEOUT_S` gives `503` + `Retry-After`; unknown model `404`, not allowed `403`,
   bad key `401`, over the rate limit `429`.
 

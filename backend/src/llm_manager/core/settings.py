@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     sleep_timeout_s: float = Field(60.0, gt=0, description="one sleep call")
     min_awake_s: float = Field(10.0, ge=0, description="turn length when another model waits")
     priority_hold_s: float = Field(10.0, ge=0, description="protects a busy higher-priority model")
+    preempt_after_s: float | None = Field(
+        None,
+        gt=0,
+        description="after a request waited this long, stop lower-priority running requests",
+    )
     reaper_interval_s: float = Field(15.0, gt=0, description="how often idle models are checked")
     sleep_level: int = Field(1, ge=1, le=2, description="1 keeps weights in CPU RAM (fast wake)")
 
@@ -68,6 +73,7 @@ class Settings(BaseSettings):
             sleep_timeout_s=self.sleep_timeout_s,
             min_awake_s=self.min_awake_s,
             priority_hold_s=self.priority_hold_s,
+            preempt_after_s=self.preempt_after_s,
             reaper_interval_s=self.reaper_interval_s,
             sleep_level=self.sleep_level,
         )

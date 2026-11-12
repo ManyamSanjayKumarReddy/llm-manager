@@ -1,7 +1,8 @@
 """The OpenAI-compatible endpoint that programs call with an API key."""
 
+import asyncio
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from typing import Any
 
 import httpx
@@ -9,11 +10,46 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from llm_manager.api.deps import ContainerDep, PrincipalDep
+from llm_manager.core.errors import UnavailableError
 from llm_manager.services.recorder import RequestRecord
 
 router = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 _BAD_GATEWAY = 502
+_STOPPED = 503
+_RETRY_AFTER_STOPPED_S = 15
+_STOPPED_MESSAGE = "stopped so a higher-priority model could use the GPU; retry shortly"
+_STOPPED_EVENT = (
+    b'data: {"error": {"message": "' + _STOPPED_MESSAGE.encode() + b'", "type": '
+    b'"llm_manager_error", "code": "model_unavailable"}}\n\ndata: [DONE]\n\n'
+)
+
+
+class _StoppedError(Exception):
+    """The model was asked to give up its running requests for a more important one."""
+
+
+class _Interruptible:
+    """Awaits upstream work, but gives up as soon as the model is asked to stop."""
+
+    def __init__(self, event: asyncio.Event) -> None:
+        self._stop = asyncio.ensure_future(event.wait())
+
+    async def run[T](self, awaitable: Awaitable[T]) -> T:
+        """Return the work's result, or raise ``_StoppedError`` (and cancel the work) on a stop."""
+        work = asyncio.ensure_future(awaitable)
+        try:
+            await asyncio.wait({work, self._stop}, return_when=asyncio.FIRST_COMPLETED)
+            if not work.done():
+                raise _StoppedError
+            return work.result()
+        finally:
+            if not work.done():
+                work.cancel()  # closes the upstream connection, so vLLM drops the request
+
+    def close(self) -> None:
+        """Stop watching; call once the request is over."""
+        self._stop.cancel()
 
 
 @router.get("/models")
@@ -77,6 +113,7 @@ async def proxy(
             )
         )
 
+    stop = _Interruptible(model.preempt_event)
     try:
         body["model"] = model.served_name
         headers = {"Content-Type": "application/json"}
@@ -85,20 +122,43 @@ async def proxy(
         upstream_request = container.http.build_request(
             "POST", f"{model.spec.url.rstrip('/')}/v1/{path}", json=body, headers=headers
         )
-        upstream = await container.http.send(upstream_request, stream=True)
+        upstream = await stop.run(container.http.send(upstream_request, stream=True))
+    except _StoppedError:
+        stop.close()
+        finish(_STOPPED)
+        manager.record_result(model, _STOPPED)
+        raise UnavailableError(_STOPPED_MESSAGE, _RETRY_AFTER_STOPPED_S) from None
     except httpx.HTTPError as exc:
+        stop.close()
         finish(None)
         manager.record_result(model, None)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"backend error: {exc}") from exc
+    except BaseException:
+        stop.close()
+        finish(None)  # never leave the slot taken, e.g. when the server is shutting down
+        raise
     manager.record_result(model, upstream.status_code)
+    is_event_stream = upstream.headers.get("content-type", "").startswith("text/event-stream")
 
     async def stream() -> AsyncIterator[bytes]:
+        final = upstream.status_code
+        chunks = upstream.aiter_raw().__aiter__()
         try:
-            async for chunk in upstream.aiter_raw():
+            while True:
+                try:
+                    chunk = await stop.run(anext(chunks))
+                except StopAsyncIteration:
+                    break
+                except _StoppedError:
+                    final = _STOPPED
+                    if is_event_stream:
+                        yield _STOPPED_EVENT
+                    break
                 yield chunk
         finally:
+            stop.close()
             await upstream.aclose()
-            finish(upstream.status_code)  # the slot is held until the last byte is sent
+            finish(final)  # the slot is held until the last byte is sent
 
     return StreamingResponse(
         stream(),

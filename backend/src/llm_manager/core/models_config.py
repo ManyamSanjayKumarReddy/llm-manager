@@ -2,10 +2,10 @@
 
 import ipaddress
 import re
-from typing import Annotated
+from typing import Annotated, Self
 from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, SecretStr
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _MAX_KEY_LENGTH = 512
@@ -96,5 +96,19 @@ class EngineConfig(BaseModel):
         ge=0,
         description="a lower-priority model waits this long after a higher one last served",
     )
+    preempt_after_s: float | None = Field(
+        None,
+        gt=0,
+        description=(
+            "a request that has waited this long for a model with a LOWER priority stops that "
+            "model's running requests and takes the GPU; None never stops running requests"
+        ),
+    )
     reaper_interval_s: float = Field(15.0, gt=0)
     sleep_level: int = Field(1, ge=1, le=2, description="1 keeps weights in CPU RAM")
+
+    @model_validator(mode="after")
+    def _preempt_before_timeout(self) -> Self:
+        if self.preempt_after_s is not None and self.preempt_after_s >= self.queue_timeout_s:
+            raise ValueError("preempt_after_s must be smaller than queue_timeout_s")
+        return self

@@ -1,5 +1,6 @@
 """Runtime state of one managed model."""
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -32,6 +33,8 @@ class ModelRuntime:
     waiting: int = 0  # requests waiting for this model to become ready
     last_used: float = field(default_factory=time.monotonic)
     awake_since: float = field(default_factory=time.monotonic)
+    # Set while a higher-priority model has asked for this model's running requests to stop.
+    preempt_event: asyncio.Event = field(default_factory=asyncio.Event)
 
     requests: int = 0
     errors: int = 0  # upstream answered >= 400, or was unreachable

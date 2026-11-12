@@ -190,6 +190,7 @@ async def make_stack(db: None) -> AsyncIterator[StackFactory]:
             "wake_timeout_s",
             "sleep_timeout_s",
             "min_awake_s",
+            "preempt_after_s",
             "reaper_interval_s",
         }
         engine_opts = {

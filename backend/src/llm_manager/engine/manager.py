@@ -16,6 +16,10 @@ The whole design in six rules:
    several models wait the highest priority swaps in first. A lower-priority model never
    interrupts a higher-priority one that is serving (or served within ``priority_hold_s``).
    Equal priorities take turns as in rule 5.
+8. Optional (``preempt_after_s``): rule 4 and 7 keep running requests safe, but a request that
+   has waited this long for a model with a HIGHER priority than the one in its way asks that
+   model's running requests to stop (the proxy cancels them with a 503), then swaps in. Equal
+   or higher priorities are never stopped.
 """
 
 import asyncio
@@ -121,6 +125,8 @@ class Manager:
             model.state = state
             if state is State.AWAKE:
                 model.awake_since = model.last_used = time.monotonic()
+            if state in (State.AWAKE, State.ASLEEP):
+                model.preempt_event.clear()  # a stop request never outlives the swap it served
             if take_slot:  # hand the waker its slot before anyone can put the model to sleep
                 model.inflight += 1
             self._cond.notify_all()
@@ -199,7 +205,7 @@ class Manager:
         return target
 
     # ---------------------------------------------------------------- decisions
-    def _decide(self, model: ModelRuntime) -> _Verdict | _Swap:
+    def _decide(self, model: ModelRuntime, waited_s: float = 0.0) -> _Verdict | _Swap:
         """Decide what a request for ``model`` must do. Called with the lock held."""
         now = time.monotonic()
         if model.state is State.DOWN:
@@ -226,10 +232,12 @@ class Manager:
         ]
         if any(o.state in (State.WAKING, State.SLEEPING) for o in in_the_way):
             return _Verdict.WAIT
-        if any(o.inflight for o in in_the_way):
-            return _Verdict.WAIT  # drain: never sleep a model that is serving requests
         if any(o.spec.priority > model.spec.priority for o in self._competitors(model)):
             return _Verdict.WAIT  # a more important model is also waiting: it goes first
+        busy = [o for o in in_the_way if o.inflight]
+        if busy:  # drain: never sleep a model that is serving requests ...
+            self._preempt_if_due(model, busy, waited_s)  # ... unless it must give way
+            return _Verdict.WAIT
         if any(
             o.spec.priority > model.spec.priority
             and now - o.last_used < self.config.priority_hold_s
@@ -237,6 +245,26 @@ class Manager:
         ):
             return _Verdict.WAIT  # never interrupt a more important model that just served
         return _Swap(model, in_the_way)
+
+    def _preempt_if_due(
+        self, model: ModelRuntime, busy: list[ModelRuntime], waited_s: float
+    ) -> None:
+        """Ask ``busy`` models to stop their running requests once ``model`` waited long enough.
+
+        Only when every one of them has a strictly lower priority; the proxy does the stopping,
+        and the swap happens as soon as the slots are given back. Called with the lock held.
+        """
+        limit = self.config.preempt_after_s
+        if limit is None or waited_s < limit:
+            return
+        if any(o.spec.priority >= model.spec.priority for o in busy):
+            return
+        for victim in busy:
+            if not victim.preempt_event.is_set():
+                victim.preempt_event.set()
+                detail = f"{victim.inflight} running request(s) stopped for {model.name}"
+                self._event(victim, "preempt", f"{detail} (waited {waited_s:.0f}s)")
+                log.warning("model %s: %s after %.0fs", victim.name, detail, waited_s)
 
     def _competitors(self, model: ModelRuntime) -> list[ModelRuntime]:
         """Sleeping models that share a GPU with ``model`` and have requests waiting."""
@@ -268,16 +296,18 @@ class Manager:
         return result
 
     async def _acquire(self, model: ModelRuntime) -> ModelRuntime:
-        deadline = time.monotonic() + self.config.queue_timeout_s
+        waiting_since = time.monotonic()
+        deadline = waiting_since + self.config.queue_timeout_s
         model.waiting += 1
         try:
             while True:
                 swap: _Swap | None = None
                 async with self._cond:
-                    verdict = self._decide(model)
+                    verdict = self._decide(model, time.monotonic() - waiting_since)
                     if verdict is _Verdict.GO:
                         model.inflight += 1
                         model.last_used = time.monotonic()
+                        model.preempt_event.clear()  # nobody more important is waiting any more
                         return model
                     if isinstance(verdict, _Swap):
                         swap = verdict
