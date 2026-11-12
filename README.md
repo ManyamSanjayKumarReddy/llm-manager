@@ -72,6 +72,30 @@ curl https://<host>:8000/v1/chat/completions -H "Authorization: Bearer $KEY" -H 
   -d '{"model": "gpt-oss-20b", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
+### Clients should retry
+
+Some `503` answers are temporary, so programs that call Wakeful should retry them. A `503` carries a `Retry-After` header (seconds):
+
+- a model could not wake or is down, or the wait went over `QUEUE_TIMEOUT_S`;
+- the request was **stopped for a higher-priority model** (only when `PREEMPT_AFTER_S` is set; its work is lost, so resend the whole request;
+  a streamed answer ends with an error event instead of a status).
+
+Wait `Retry-After` seconds, then send the request again, a few times at most. A `429` (rate limit) also has `Retry-After`.
+Do not retry `400`, `401`, `403` or `404`.
+
+```python
+import time, requests
+
+def ask(payload, key, tries=4):
+    for _ in range(tries):
+        r = requests.post("https://<host>:8000/v1/chat/completions", json=payload,
+                          headers={"Authorization": f"Bearer {key}"}, timeout=600)
+        if r.status_code not in (429, 503):
+            return r
+        time.sleep(int(r.headers.get("Retry-After", 10)))
+    return r
+```
+
 CLI (from `backend/`): `uv run llm-manager list-users | reset-password | unlock-user | create-api-key`.
 
 ## Security
