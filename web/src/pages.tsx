@@ -8,6 +8,7 @@ import { ApiKeys } from "./features/keys/ApiKeys";
 import { Models } from "./features/models/Models";
 import { Overview } from "./features/overview/Overview";
 import { Usage } from "./features/usage/Usage";
+import { Scheduling } from "./features/scheduling/Scheduling";
 import { Servers } from "./features/servers/Servers";
 import { Users } from "./features/users/Users";
 
@@ -35,6 +36,7 @@ export const PAGES: readonly DashboardPage[] = [
   { path: "/api-keys", title: "API keys", admin: true, nav: true, group: "Developers", view: <ApiKeys /> },
   { path: "/connect", title: "Connect", nav: true, group: "Developers", view: <Connect /> },
   { path: "/users", title: "Users", admin: true, nav: true, group: "Admin", view: <Users /> },
+  { path: "/scheduling", title: "Scheduling", admin: true, nav: true, group: "Admin", view: <Scheduling /> },
   { path: "/audit", title: "Audit", admin: true, nav: true, group: "Admin", view: <Audit /> },
   { path: "/account", title: "Account", nav: true, view: <Account /> },
 ];

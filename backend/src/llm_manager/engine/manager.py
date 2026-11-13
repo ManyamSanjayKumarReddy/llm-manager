@@ -297,7 +297,6 @@ class Manager:
 
     async def _acquire(self, model: ModelRuntime) -> ModelRuntime:
         waiting_since = time.monotonic()
-        deadline = waiting_since + self.config.queue_timeout_s
         model.waiting += 1
         try:
             while True:
@@ -315,7 +314,8 @@ class Manager:
                         for other in swap.to_sleep:
                             other.state = State.SLEEPING
                     else:
-                        remaining = deadline - time.monotonic()
+                        # Read live, so a changed queue timeout also applies to waiting requests.
+                        remaining = waiting_since + self.config.queue_timeout_s - time.monotonic()
                         if remaining <= 0:
                             raise UnavailableError(
                                 f"timed out waiting for {model.name}", _RETRY_AFTER_QUEUE_S
@@ -440,6 +440,17 @@ class Manager:
                 )
             model.state = State.SLEEPING
         await self._go_to_sleep(model, "manual")
+
+    async def reconfigure(self, config: EngineConfig) -> None:
+        """Apply new timings at once; requests that are already waiting use them too."""
+        async with self._cond:
+            self.config = config
+            self._backend.configure(
+                sleep_level=config.sleep_level,
+                sleep_timeout_s=config.sleep_timeout_s,
+                wake_timeout_s=config.wake_timeout_s,
+            )
+            self._cond.notify_all()
 
     # ---------------------------------------------------------- background jobs
     async def startup(self) -> None:

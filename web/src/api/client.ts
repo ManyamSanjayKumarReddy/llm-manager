@@ -14,6 +14,8 @@ import type {
   NewUser,
   Page,
   RouterEvent,
+  SchedulerSettings,
+  SchedulerValues,
   Server,
   SessionInfo,
   StatusData,
@@ -32,7 +34,7 @@ export class ApiError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 let csrfToken = "";
 let onUnauthorized: () => void = () => undefined;
@@ -138,6 +140,10 @@ export const api = {
   usage: (days: number) => request<Usage>("GET", `/api/usage?days=${days}`),
   keyUsage: (keyId: string, days: number) =>
     request<KeyUsage>("GET", `/api/usage/keys/${id(keyId)}?days=${days}`),
+
+  schedulerSettings: () => request<SchedulerSettings>("GET", "/api/settings/scheduler"),
+  saveSchedulerSettings: (values: SchedulerValues) =>
+    request<SchedulerSettings>("PUT", "/api/settings/scheduler", values),
 
   servers: () => request<Server[]>("GET", "/api/servers"),
   addServer: (server: { name: string; gpu_count: number; gpu_type: string | null }) => request<Server>("POST", "/api/servers", server),

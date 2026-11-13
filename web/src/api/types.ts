@@ -216,3 +216,24 @@ export interface KeyUsage {
   daily: UsageDay[];
   models: UsageModel[];
 }
+
+/** The scheduler's timings, all in seconds. */
+export interface SchedulerValues {
+  queue_timeout_s: number;
+  min_awake_s: number;
+  priority_hold_s: number;
+  /** null: never stop a running request. */
+  preempt_after_s: number | null;
+  wake_timeout_s: number;
+  sleep_timeout_s: number;
+  reaper_interval_s: number;
+  sleep_level: number;
+}
+
+export interface SchedulerSettings {
+  values: SchedulerValues;
+  /** What "Reset to defaults" restores. */
+  defaults: SchedulerValues;
+  updated_at: string | null;
+  updated_by: string | null;
+}

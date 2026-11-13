@@ -192,3 +192,27 @@ class ManagedModel(Model):
         """Table options."""
 
         table = "managed_models"
+
+
+class SchedulerSettings(Model):
+    """The wake/sleep scheduler's timings, edited by admins. A single row (``id`` is always 1).
+
+    Without a row the environment defaults apply (see ``Settings``).
+    """
+
+    id = fields.IntField(primary_key=True, generated=False)
+    queue_timeout_s = fields.FloatField()
+    wake_timeout_s = fields.FloatField()
+    sleep_timeout_s = fields.FloatField()
+    min_awake_s = fields.FloatField()
+    priority_hold_s = fields.FloatField()
+    preempt_after_s = fields.FloatField(null=True)  # None: never stop a running request
+    reaper_interval_s = fields.FloatField()
+    sleep_level = fields.IntField()
+    updated_at = fields.DatetimeField(auto_now=True)
+    updated_by = fields.CharField(max_length=64, null=True)
+
+    class Meta:
+        """Table options."""
+
+        table = "scheduler_settings"

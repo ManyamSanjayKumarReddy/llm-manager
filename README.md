@@ -21,14 +21,15 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 - **Servers:** register each machine with GPUs on the Servers page (name and GPU count), then pick a server when you add a model. A GPU is a server plus a number, so GPU 0 on two different servers are different GPUs. Models only share a GPU when they are on the same server and list the same number.
 - Models that share a GPU are never awake together. A request for a sleeping model waits while the other finishes
   its running requests and sleeps, then the target wakes.
-- A model is never put to sleep while it has requests running. Equal priorities take turns (`MIN_AWAKE_S`).
+- A model is never put to sleep while it has requests running. Equal priorities take turns (turn length).
 - **Priority:** when models sharing a GPU both have requests waiting, the higher number goes first. A lower-priority
-  model never interrupts a higher one that is serving or served within `PRIORITY_HOLD_S`.
+  model never interrupts a higher one that is serving or served within the priority hold.
 - Every model sleeps after its own idle time, whatever its priority.
-- **Preemption (off by default):** a running request is normally never stopped. With `PREEMPT_AFTER_S=30`, a request that has
+- **Preemption (off by default):** a running request is normally never stopped. With stopping switched on (for example after 30 s), a request that has
   waited 30 s for a model with a **lower** priority stops that model's running requests (they get `503` + `Retry-After`;
-  streams end with an error event) and takes the GPU. Equal or higher priorities are never stopped. Keep it below `QUEUE_TIMEOUT_S`.
-- Failure to wake or a wait over `QUEUE_TIMEOUT_S` gives `503` + `Retry-After`; unknown model `404`, not allowed `403`,
+  streams end with an error event) and takes the GPU. Equal or higher priorities are never stopped. Keep it below the queue timeout.
+- **These timings are edited in the dashboard** (admin → *Scheduling*): queue timeout, turn length, priority hold, stopping running requests, wake/sleep limits. They are saved in the database and apply at once. The `QUEUE_TIMEOUT_S`, `MIN_AWAKE_S`, `PRIORITY_HOLD_S`, `PREEMPT_AFTER_S`, … environment variables only give the starting values until someone saves the page.
+- Failure to wake or a wait over the queue timeout gives `503` + `Retry-After`; unknown model `404`, not allowed `403`,
   bad key `401`, over the rate limit `429`.
 
 Wakeful does not create models or touch Docker. You start vLLM containers; the dashboard builds the command and registers them.
@@ -78,7 +79,7 @@ curl https://<host>:8000/v1/chat/completions -H "Authorization: Bearer $KEY" -H 
 Some `503` answers are temporary, so programs that call Wakeful should retry them. A `503` carries a `Retry-After` header (seconds):
 
 - a model could not wake or is down, or the wait went over `QUEUE_TIMEOUT_S`;
-- the request was **stopped for a higher-priority model** (only when `PREEMPT_AFTER_S` is set; its work is lost, so resend the whole request;
+- the request was **stopped for a higher-priority model** (only when stopping is switched on; its work is lost, so resend the whole request;
   a streamed answer ends with an error event instead of a status).
 
 Wait `Retry-After` seconds, then send the request again, a few times at most. A `429` (rate limit) also has `Retry-After`.

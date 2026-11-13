@@ -32,7 +32,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); setCsr
 describe("addresses", () => {
   it("are real paths, never hashes", () => {
     for (const p of PAGES) expect(p.path).toMatch(/^\/[a-z-]+(\/[a-z-]+)?$/);
-    expect(PAGES.map((p) => p.path)).toEqual(["/overview", "/servers", "/models", "/usage", "/history", "/api-keys", "/connect", "/users", "/audit", "/account"]);
+    expect(PAGES.map((p) => p.path)).toEqual(["/overview", "/servers", "/models", "/usage", "/history", "/api-keys", "/connect", "/users", "/scheduling", "/audit", "/account"]);
   });
 
   it("ignore a trailing slash", () => {
@@ -59,7 +59,7 @@ describe("moving around", () => {
     const user = userEvent.setup();
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Sections" });
-    const expected = { Overview: "/overview", Servers: "/servers", Models: "/models", Usage: "/usage", History: "/history", "API keys": "/api-keys", Connect: "/connect", Users: "/users", Audit: "/audit", Account: "/account" };
+    const expected = { Overview: "/overview", Servers: "/servers", Models: "/models", Usage: "/usage", History: "/history", "API keys": "/api-keys", Connect: "/connect", Users: "/users", Scheduling: "/scheduling", Audit: "/audit", Account: "/account" };
     for (const [label, href] of Object.entries(expected)) {
       // pages inside a closed drop-down are hidden but still real links
       expect(within(nav).getByRole("link", { name: label, hidden: true })).toHaveAttribute("href", href);
@@ -95,7 +95,7 @@ describe("moving around", () => {
 
     await user.click(within(nav).getByRole("button", { name: "Admin" })); // opening another one closes the first
     expect(within(nav).getByRole("button", { name: "Fleet" })).toHaveAttribute("aria-expanded", "false");
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Overview", "Users", "Audit", "Account"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Overview", "Users", "Scheduling", "Audit", "Account"]);
 
     await user.keyboard("{Escape}");
     expect(within(nav).getByRole("button", { name: "Admin" })).toHaveAttribute("aria-expanded", "false");

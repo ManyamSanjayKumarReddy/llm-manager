@@ -18,6 +18,7 @@ from llm_manager.api.routers import (
     health,
     models,
     proxy,
+    scheduling,
     servers,
     status,
     usage,
@@ -32,6 +33,7 @@ from llm_manager.engine import Manager
 from llm_manager.engine.backend import VllmBackend
 from llm_manager.services.maintenance import run_maintenance
 from llm_manager.services.models import ModelStore
+from llm_manager.services.scheduler_settings import stored_engine_config
 
 _CONNECT_TIMEOUT_S = 5.0
 _WRITE_TIMEOUT_S = 30.0
@@ -48,11 +50,10 @@ def create_app(
 
     Args:
         settings: Security and infrastructure settings.
-        engine_config: Scheduler timings; defaults to the ones in ``settings``.
+        engine_config: Scheduler timings (tests); by default the saved ones, else ``settings``.
         http_client: Client used to reach the vLLM containers (tests inject a fake).
         manage_orm: Connect to the database at startup. Tests that already did pass False.
     """
-    timings = engine_config or settings.engine
     keep_query_parameters_out_of_logs()
 
     @asynccontextmanager
@@ -70,6 +71,8 @@ def create_app(
                     )
                 )
                 stack.push_async_callback(http.aclose)
+            # Admins change the timings in the dashboard; they win over the environment.
+            timings = engine_config or await stored_engine_config(settings)
             backend = VllmBackend(
                 http,
                 sleep_level=timings.sleep_level,
@@ -110,7 +113,18 @@ def create_app(
     app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.allowed_origins)
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.cookie_secure)
     register_exception_handlers(app)
-    for module in (health, auth, users, api_keys, servers, models, status, usage, proxy):
+    for module in (
+        health,
+        auth,
+        users,
+        api_keys,
+        servers,
+        models,
+        scheduling,
+        status,
+        usage,
+        proxy,
+    ):
         app.include_router(module.router)
     dist = settings.web_dist_path
     if dist is not None and (dist / "index.html").is_file():

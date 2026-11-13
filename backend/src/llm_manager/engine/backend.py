@@ -27,6 +27,12 @@ class VllmBackend:
         self._sleep_timeout_s = sleep_timeout_s
         self._wake_timeout_s = wake_timeout_s
 
+    def configure(self, *, sleep_level: int, sleep_timeout_s: float, wake_timeout_s: float) -> None:
+        """Change the sleep level and timeouts used from the next call on."""
+        self._sleep_level = sleep_level
+        self._sleep_timeout_s = sleep_timeout_s
+        self._wake_timeout_s = wake_timeout_s
+
     @staticmethod
     def _headers(spec: ModelSpec) -> dict[str, str]:
         key = spec.backend_key

@@ -101,7 +101,7 @@ async def test_tokens_are_counted_per_key_and_model(make_stack: StackFactory) ->
 
     async def counted() -> bool:
         body = (await client.get("/api/usage?days=7")).json()
-        return body["totals"]["requests"] == 5
+        return bool(body["totals"]["requests"] == 5)
 
     await eventually(counted)
     body = (await client.get("/api/usage?days=7")).json()
@@ -141,7 +141,7 @@ async def test_one_keys_usage(make_stack: StackFactory) -> None:
     await stack.chat(other, "c")
 
     async def both() -> bool:
-        return (await client.get("/api/usage")).json()["totals"]["requests"] == 2
+        return bool((await client.get("/api/usage")).json()["totals"]["requests"] == 2)
 
     await eventually(both)
     keys = (await client.get("/api/usage")).json()["keys"]
@@ -161,7 +161,7 @@ async def test_errors_are_counted_and_cost_no_tokens(make_stack: StackFactory) -
     assert (await stack.chat(token, "b", fail=True)).status_code == 500
 
     async def seen() -> bool:
-        return (await client.get("/api/usage")).json()["totals"]["requests"] == 1
+        return bool((await client.get("/api/usage")).json()["totals"]["requests"] == 1)
 
     await eventually(seen)
     totals = (await client.get("/api/usage")).json()["totals"]
@@ -182,7 +182,7 @@ async def test_streams_are_counted_and_the_client_sees_no_extra_event(
     assert '"usage"' in asked.text  # this client wanted it
 
     async def counted() -> bool:
-        return (await client.get("/api/usage")).json()["totals"]["requests"] == 2
+        return bool((await client.get("/api/usage")).json()["totals"]["requests"] == 2)
 
     await eventually(counted)
     totals = (await client.get("/api/usage")).json()["totals"]
