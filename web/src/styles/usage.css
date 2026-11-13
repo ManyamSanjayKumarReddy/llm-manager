@@ -1,0 +1,39 @@
+/* Usage page. Series colours were checked with the palette validator on the panel surface. */
+:root {
+  --series-prompt: #2e7dff;
+  --series-completion: #c08215;
+}
+
+.range-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; color: var(--dim); font-size: 13px; }
+.legend .key { display: inline-flex; align-items: center; gap: 8px; }
+.legend .swatch { width: 10px; height: 10px; border-radius: 3px; }
+.swatch.prompt, .seg.prompt { background: var(--series-prompt); }
+.swatch.completion, .seg.completion { background: var(--series-completion); }
+
+.readout { min-height: 22px; font: 13px var(--font-mono); color: var(--dim); }
+.readout strong { color: var(--bone); font-weight: 600; }
+
+.daily { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; }
+.daily .y { display: flex; flex-direction: column; justify-content: space-between; height: 180px; font: 11px var(--font-mono); color: var(--faint); text-align: right; }
+.daily .plot { position: relative; height: 180px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--hair-strong); }
+.daily .plot::before { content: ""; position: absolute; inset: 50% 0 auto; border-top: 1px solid var(--hair); }
+.daily .col { position: relative; flex: 1 1 0; min-width: 2px; height: 100%; display: flex; flex-direction: column-reverse; gap: 2px; padding: 0; border: 0; background: none; cursor: default; }
+.daily .col:hover, .daily .col:focus-visible { background: rgba(255, 255, 255, 0.05); outline: none; }
+.daily .seg { width: 100%; border-radius: 3px 3px 0 0; min-height: 0; }
+.daily .x { grid-column: 2; display: flex; justify-content: space-between; font: 11px var(--font-mono); color: var(--faint); padding-top: 6px; }
+
+.share { display: grid; gap: 4px; min-width: 120px; }
+.share .track { height: 6px; border-radius: 3px; background: var(--hair); overflow: hidden; display: flex; gap: 2px; }
+.share .seg { height: 100%; }
+
+.usage-table td.num, .usage-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.usage-table td.num { font-family: var(--font-mono); }
+.row-open { background: none; border: 0; padding: 0; text-align: left; color: inherit; cursor: pointer; display: grid; gap: 2px; }
+.row-open:hover strong { color: var(--tide); }
+details.as-table summary { cursor: pointer; color: var(--dim); font-size: 13px; }
+details.as-table .table-wrap { margin-top: 10px; max-height: 320px; overflow: auto; }
+.mini-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+.mini-stats div { display: grid; gap: 2px; }
+.mini-stats b { font: 600 22px var(--font-display); letter-spacing: -0.02em; }
+.mini-stats span { font: 11px var(--font-mono); color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }

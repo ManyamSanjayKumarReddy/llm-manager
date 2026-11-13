@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # Data retention
     retention_days: int = Field(30, ge=1, description="request log and event history")
     audit_retention_days: int = Field(365, ge=30)
+    usage_retention_days: int = Field(730, ge=30, description="daily token and request totals")
 
     # Reverse proxy
     trust_proxy: bool = False  # take the client IP from X-Real-IP (only behind a proxy you control)

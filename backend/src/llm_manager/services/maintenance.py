@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from tortoise.exceptions import BaseORMException
 
 from llm_manager.core.settings import Settings
-from llm_manager.db.models import AuditLog, Event, RequestLog, Session
+from llm_manager.db.models import AuditLog, Event, RequestLog, Session, UsageDaily
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,9 @@ async def cleanup(settings: Settings) -> None:
     await Session.filter(expires_at__lt=now).delete()
     await RequestLog.filter(ts__lt=history_cutoff).delete()
     await Event.filter(ts__lt=history_cutoff).delete()
+    await UsageDaily.filter(
+        day__lt=(now - timedelta(days=settings.usage_retention_days)).date()
+    ).delete()
     await AuditLog.filter(ts__lt=now - timedelta(days=settings.audit_retention_days)).delete()
 
 

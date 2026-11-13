@@ -17,6 +17,8 @@ import type {
   Server,
   SessionInfo,
   StatusData,
+  Usage,
+  KeyUsage,
   User,
 } from "./types";
 
@@ -132,6 +134,10 @@ export const api = {
     request<User>("PATCH", `/api/users/${id(userId)}`, changes),
   resetPassword: (userId: string, new_password: string) =>
     send("POST", `/api/users/${id(userId)}/password`, { new_password }),
+
+  usage: (days: number) => request<Usage>("GET", `/api/usage?days=${days}`),
+  keyUsage: (keyId: string, days: number) =>
+    request<KeyUsage>("GET", `/api/usage/keys/${id(keyId)}?days=${days}`),
 
   servers: () => request<Server[]>("GET", "/api/servers"),
   addServer: (server: { name: string; gpu_count: number; gpu_type: string | null }) => request<Server>("POST", "/api/servers", server),

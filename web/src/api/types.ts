@@ -174,3 +174,45 @@ export interface ModelCheck {
   key_accepted: boolean | null;
   problems: string[];
 }
+
+/** Requests and tokens added up over some period. */
+export interface UsageTotals {
+  requests: number;
+  errors: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+/** One UTC day (days without traffic are included, with zeros). */
+export interface UsageDay extends UsageTotals {
+  day: string;
+}
+
+export interface UsageModel extends UsageTotals {
+  model: string;
+}
+
+/** One API key's usage; keys that were not used in the period are listed with zeros. */
+export interface UsageKey extends UsageTotals {
+  id: string;
+  label: string;
+  prefix: string;
+  revoked: boolean;
+  last_used_at: string | null;
+}
+
+export interface Usage {
+  days: number;
+  totals: UsageTotals;
+  daily: UsageDay[];
+  keys: UsageKey[];
+  models: UsageModel[];
+}
+
+export interface KeyUsage {
+  key: UsageKey;
+  days: number;
+  daily: UsageDay[];
+  models: UsageModel[];
+}

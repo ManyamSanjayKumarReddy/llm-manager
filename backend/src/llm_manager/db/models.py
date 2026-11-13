@@ -93,12 +93,33 @@ class RequestLog(Model):
     status = fields.IntField()
     duration_ms = fields.IntField()
     queue_wait_ms = fields.IntField()
+    prompt_tokens = fields.IntField(default=0)
+    completion_tokens = fields.IntField(default=0)
 
     class Meta:
         """Table options."""
 
         table = "request_log"
         indexes: ClassVar = [("model", "ts")]
+
+
+class UsageDaily(Model):
+    """Requests and tokens per day, API key and model. Outlives the request log."""
+
+    id = fields.BigIntField(primary_key=True)
+    day = fields.DateField(db_index=True)  # UTC
+    api_key_id = fields.UUIDField(db_index=True)
+    model = fields.CharField(max_length=100)
+    requests = fields.BigIntField(default=0)
+    errors = fields.BigIntField(default=0)
+    prompt_tokens = fields.BigIntField(default=0)
+    completion_tokens = fields.BigIntField(default=0)
+
+    class Meta:
+        """Table options."""
+
+        table = "usage_daily"
+        unique_together: ClassVar = [("day", "api_key_id", "model")]
 
 
 class Event(Model):

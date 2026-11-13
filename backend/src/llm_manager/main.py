@@ -20,6 +20,7 @@ from llm_manager.api.routers import (
     proxy,
     servers,
     status,
+    usage,
     users,
 )
 from llm_manager.api.spa import SpaStaticFiles
@@ -109,7 +110,7 @@ def create_app(
     app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.allowed_origins)
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.cookie_secure)
     register_exception_handlers(app)
-    for module in (health, auth, users, api_keys, servers, models, status, proxy):
+    for module in (health, auth, users, api_keys, servers, models, status, usage, proxy):
         app.include_router(module.router)
     dist = settings.web_dist_path
     if dist is not None and (dist / "index.html").is_file():

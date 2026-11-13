@@ -14,6 +14,7 @@ from llm_manager.services.recorder import Recorder
 from llm_manager.services.servers import ServerService
 from llm_manager.services.sessions import SessionService
 from llm_manager.services.stats import StatsService
+from llm_manager.services.usage import UsageService
 from llm_manager.services.users import UserService
 
 
@@ -32,6 +33,7 @@ class Container:
     models: ModelService
     api_keys: ApiKeyService
     stats: StatsService
+    usage: UsageService
     recorder: Recorder
 
 
@@ -51,5 +53,6 @@ def build_container(settings: Settings, manager: Manager, http: httpx.AsyncClien
         models=ModelService(manager, audit, http),
         api_keys=ApiKeyService(audit),
         stats=StatsService(),
+        usage=UsageService(),
         recorder=Recorder(),
     )

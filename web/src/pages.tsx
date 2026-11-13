@@ -6,6 +6,7 @@ import { History } from "./features/history/History";
 import { ApiKeys } from "./features/keys/ApiKeys";
 import { Models } from "./features/models/Models";
 import { Overview } from "./features/overview/Overview";
+import { Usage } from "./features/usage/Usage";
 import { Servers } from "./features/servers/Servers";
 import { Users } from "./features/users/Users";
 
@@ -28,6 +29,7 @@ export const PAGES: readonly DashboardPage[] = [
   { path: "/models", title: "Models", admin: true, nav: true, view: <Models /> },
   { path: "/history", title: "History", nav: true, view: <History /> },
   { path: "/api-keys", title: "API keys", admin: true, nav: true, view: <ApiKeys /> },
+  { path: "/usage", title: "Usage", admin: true, nav: true, view: <Usage /> },
   { path: "/users", title: "Users", admin: true, nav: true, view: <Users /> },
   { path: "/audit", title: "Audit", admin: true, nav: true, view: <Audit /> },
   { path: "/account", title: "Account", nav: true, view: <Account /> },

@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from llm_manager.api.deps import ContainerDep, PrincipalDep
 from llm_manager.core.errors import UnavailableError
+from llm_manager.core.usage import JsonTail, SseUsage, TokenUsage, wants_stream_usage
 from llm_manager.services.recorder import RequestRecord
 
 router = APIRouter(prefix="/v1", tags=["openai-compatible"])
@@ -85,6 +86,7 @@ async def proxy(
     """Forward a request to the model, waking it first if it is asleep."""
     container.api_keys.enforce_rate_limit(principal)
     body, name = await _read_body(request)
+    stream_usage = wants_stream_usage(path, body)  # ask vLLM to report tokens for streams too
     manager = container.manager
     model = manager.resolve(name)  # 404 for unknown models
     if not principal.may_use(model.name):
@@ -96,7 +98,7 @@ async def proxy(
 
     released = False
 
-    def finish(status_code: int | None) -> None:
+    def finish(status_code: int | None, usage: TokenUsage | None = None) -> None:
         """Release the model slot and log the request, exactly once."""
         nonlocal released
         if released:
@@ -110,6 +112,8 @@ async def proxy(
                 status=status_code or _BAD_GATEWAY,
                 duration_ms=int((time.monotonic() - started) * 1000),
                 queue_wait_ms=queue_wait_ms,
+                prompt_tokens=usage.prompt_tokens if usage else 0,
+                completion_tokens=usage.completion_tokens if usage else 0,
             )
         )
 
@@ -140,6 +144,10 @@ async def proxy(
     manager.record_result(model, upstream.status_code)
     is_event_stream = upstream.headers.get("content-type", "").startswith("text/event-stream")
 
+    # Tokens are read from what passes through (usage is reported at the very end of a reply).
+    events = SseUsage(strip=stream_usage is False) if is_event_stream else None
+    tail = JsonTail()
+
     async def stream() -> AsyncIterator[bytes]:
         final = upstream.status_code
         chunks = upstream.aiter_raw().__aiter__()
@@ -154,11 +162,18 @@ async def proxy(
                     if is_event_stream:
                         yield _STOPPED_EVENT
                     break
-                yield chunk
+                if events is None:
+                    tail.feed(chunk)
+                    yield chunk
+                elif out := events.feed(chunk):
+                    yield out
+            if events is not None and final != _STOPPED and (rest := events.finish()):
+                yield rest
         finally:
             stop.close()
             await upstream.aclose()
-            finish(final)  # the slot is held until the last byte is sent
+            usage = events.usage if events is not None else tail.usage()
+            finish(final, usage)  # the slot is held until the last byte is sent
 
     return StreamingResponse(
         stream(),

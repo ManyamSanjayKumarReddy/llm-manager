@@ -32,7 +32,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); setCsr
 describe("addresses", () => {
   it("are real paths, never hashes", () => {
     for (const p of PAGES) expect(p.path).toMatch(/^\/[a-z-]+(\/[a-z-]+)?$/);
-    expect(PAGES.map((p) => p.path)).toEqual(["/overview", "/servers", "/models", "/history", "/api-keys", "/users", "/audit", "/account"]);
+    expect(PAGES.map((p) => p.path)).toEqual(["/overview", "/servers", "/models", "/history", "/api-keys", "/usage", "/users", "/audit", "/account"]);
   });
 
   it("ignore a trailing slash", () => {

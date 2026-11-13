@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+from tortoise import Tortoise
 from tortoise.exceptions import BaseORMException
 
 from llm_manager.db.models import Event, RequestLog
@@ -16,6 +17,7 @@ log = logging.getLogger(__name__)
 
 _QUEUE_SIZE = 10_000
 _BATCH_SIZE = 200
+_ERROR_STATUS = 400
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,38 @@ class RequestRecord:
     status: int
     duration_ms: int
     queue_wait_ms: int
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+
+
+_UPSERT_DAILY_SQL = """
+INSERT INTO usage_daily (day, api_key_id, model, requests, errors, prompt_tokens, completion_tokens)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (day, api_key_id, model) DO UPDATE SET
+    requests = usage_daily.requests + EXCLUDED.requests,
+    errors = usage_daily.errors + EXCLUDED.errors,
+    prompt_tokens = usage_daily.prompt_tokens + EXCLUDED.prompt_tokens,
+    completion_tokens = usage_daily.completion_tokens + EXCLUDED.completion_tokens
+"""
+
+
+async def _add_to_daily_totals(records: list[RequestRecord]) -> None:
+    """Add a batch of finished requests to the per-day, per-key, per-model totals."""
+    today = datetime.now(UTC).date()
+    totals: dict[tuple[UUID, str], list[int]] = {}
+    for r in records:
+        if r.api_key_id is None:
+            continue
+        row = totals.setdefault((r.api_key_id, r.model), [0, 0, 0, 0])
+        row[0] += 1
+        row[1] += int(r.status >= _ERROR_STATUS)
+        row[2] += r.prompt_tokens
+        row[3] += r.completion_tokens
+    connection = Tortoise.get_connection("default")
+    for (key_id, model), (count, errors, prompt, completion) in totals.items():
+        await connection.execute_query(
+            _UPSERT_DAILY_SQL, [today, key_id, model, count, errors, prompt, completion]
+        )
 
 
 class Recorder:
@@ -79,6 +113,8 @@ class Recorder:
                 status=r.status,
                 duration_ms=r.duration_ms,
                 queue_wait_ms=r.queue_wait_ms,
+                prompt_tokens=r.prompt_tokens,
+                completion_tokens=r.completion_tokens,
             )
             for r in batch
             if isinstance(r, RequestRecord)
@@ -91,6 +127,7 @@ class Recorder:
         try:
             if requests:
                 await RequestLog.bulk_create(requests)
+                await _add_to_daily_totals([r for r in batch if isinstance(r, RequestRecord)])
             if events:
                 await Event.bulk_create(events)
         except BaseORMException:

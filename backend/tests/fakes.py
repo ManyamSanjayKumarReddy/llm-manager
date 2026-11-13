@@ -1,12 +1,15 @@
 """Fake vLLM containers that police the rules the engine must obey."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+
+USAGE = {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12}  # what every fake reports
 
 
 class Ledger:
@@ -49,6 +52,7 @@ class FakeVLLM:
             None  # like `vllm serve --api-key`: protects everything but /health
         )
         self.last_model: str | None = None
+        self.last_body: dict[str, Any] = {}
         ledger.wake(name)  # a fresh container starts awake, like the real thing
         self.app = self._build()
 
@@ -98,6 +102,7 @@ class FakeVLLM:
         async def chat(request: Request) -> Response | dict[str, Any]:
             body = await request.json()
             self.last_model = body.get("model")
+            self.last_body = body
             if self.sleeping:
                 self.ledger.violations.append(f"{self.name} got a request while asleep")
                 return JSONResponse({"error": "asleep"}, status_code=500)
@@ -114,10 +119,14 @@ class FakeVLLM:
                 async def chunks() -> AsyncIterator[bytes]:
                     for i in range(3):
                         yield f"data: chunk{i}\n\n".encode()
+                    if (body.get("stream_options") or {}).get("include_usage"):
+                        # like vLLM: a last chunk with no choices that carries the totals
+                        tail = f'"choices": [], "usage": {json.dumps(USAGE)}'
+                        yield f'data: {{"id": "x", {tail}}}\n\n'.encode()
                     yield b"data: [DONE]\n\n"
 
                 return StreamingResponse(chunks(), media_type="text/event-stream")
-            return {"id": "x", "model": self.last_model, "served_by": self.name}
+            return {"id": "x", "model": self.last_model, "served_by": self.name, "usage": USAGE}
 
         return app
 
