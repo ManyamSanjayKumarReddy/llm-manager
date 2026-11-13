@@ -74,7 +74,7 @@ function ServerRow({ server, onChange, onRemove }: { server: Server; onChange: (
     <tr>
       <td className="primary"><strong>{server.name}</strong></td>
       <td data-label="GPU type">
-        <input className="input" type="text" maxLength={100} placeholder="e.g. RTX 4060 Ti 16 GB" aria-label={`GPU type of ${server.name}`} value={type} onChange={(e) => { setType(e.target.value); }} />
+        <input className="input" type="text" maxLength={100} aria-label={`GPU type of ${server.name}`} value={type} onChange={(e) => { setType(e.target.value); }} />
       </td>
       <td data-label="GPUs">
         <input className="input" type="number" min={1} max={16} inputMode="numeric" aria-label={`GPUs on ${server.name}`} style={{ width: "5rem" }} value={count} onChange={(e) => { setCount(e.target.value); }} />
@@ -99,7 +99,7 @@ function ServerRow({ server, onChange, onRemove }: { server: Server; onChange: (
 
 function NewServerForm({ onCreate }: { onCreate: (server: { name: string; gpu_count: number; gpu_type: string | null }) => Promise<boolean> }) {
   const [name, setName] = useState("");
-  const [gpus, setGpus] = useState("2");
+  const [gpus, setGpus] = useState("");
   const [type, setType] = useState("");
 
   async function submit(event: SubmitEvent) {
@@ -107,7 +107,7 @@ function NewServerForm({ onCreate }: { onCreate: (server: { name: string; gpu_co
     if (await onCreate({ name: name.trim(), gpu_count: Number(gpus), gpu_type: type.trim() || null })) {
       setName("");
       setType("");
-      setGpus("2");
+      setGpus("");
     }
   }
 
@@ -116,10 +116,10 @@ function NewServerForm({ onCreate }: { onCreate: (server: { name: string; gpu_co
       <h2>Add a server</h2>
       <div className="row">
         <Field label="Name">
-          <input className="input" type="text" required maxLength={64} placeholder="ops-local-2" autoComplete="off" autoCapitalize="none" spellCheck={false} value={name} onChange={(e) => { setName(e.target.value); }} />
+          <input className="input" type="text" required maxLength={64} autoComplete="off" autoCapitalize="none" spellCheck={false} value={name} onChange={(e) => { setName(e.target.value); }} />
         </Field>
         <Field label="GPU type (optional)">
-          <input className="input" type="text" maxLength={100} placeholder="RTX 4060 Ti 16 GB" autoComplete="off" value={type} onChange={(e) => { setType(e.target.value); }} />
+          <input className="input" type="text" maxLength={100} autoComplete="off" value={type} onChange={(e) => { setType(e.target.value); }} />
         </Field>
         <Field label="How many GPUs">
           <input className="input" type="number" required min={1} max={16} inputMode="numeric" value={gpus} onChange={(e) => { setGpus(e.target.value); }} />

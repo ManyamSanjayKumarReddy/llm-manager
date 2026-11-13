@@ -38,7 +38,6 @@ describe("Servers screen", () => {
 
     await user.type(screen.getByLabelText("Name"), "ops-local-2");
     await user.type(screen.getByLabelText("GPU type (optional)"), "RTX 4060 Ti 16 GB");
-    await user.clear(screen.getByLabelText("How many GPUs"));
     await user.type(screen.getByLabelText("How many GPUs"), "4");
     await user.click(screen.getByRole("button", { name: "Add server" }));
 
