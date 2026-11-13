@@ -1,0 +1,8 @@
+.connect-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 2fr) 128px; gap: 12px 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--hair); }
+.connect-row:first-of-type { border-top: 0; }
+.connect-label { display: grid; gap: 4px; justify-items: start; }
+.connect-label > span:first-child { font-weight: 600; }
+.connect-value { display: block; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--ink); border: 1px solid var(--hair-strong);
+  font: 13px var(--font-mono); color: var(--foam); overflow-x: auto; white-space: nowrap; }
+.connect-row.picked .connect-value { border-color: var(--tide); }
+@media (max-width: 720px) { .connect-row { grid-template-columns: 1fr; } .connect-row > .btn { justify-self: start; } }

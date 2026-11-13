@@ -13,6 +13,7 @@ import "./styles/layout.css";
 import "./styles/landing.css";
 import "./styles/addmodel.css";
 import "./styles/usage.css";
+import "./styles/connect.css";
 import "./styles/gradients.css";
 import "./styles/responsive.css";
 

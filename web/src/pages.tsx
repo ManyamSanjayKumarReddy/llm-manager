@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Account } from "./features/account/Account";
+import { Connect } from "./features/connect/Connect";
 import { Audit } from "./features/audit/Audit";
 import { History } from "./features/history/History";
 import { ApiKeys } from "./features/keys/ApiKeys";
@@ -29,6 +30,7 @@ export const PAGES: readonly DashboardPage[] = [
   { path: "/models", title: "Models", admin: true, nav: true, view: <Models /> },
   { path: "/history", title: "History", nav: true, view: <History /> },
   { path: "/api-keys", title: "API keys", admin: true, nav: true, view: <ApiKeys /> },
+  { path: "/connect", title: "Connect", nav: true, view: <Connect /> },
   { path: "/usage", title: "Usage", admin: true, nav: true, view: <Usage /> },
   { path: "/users", title: "Users", admin: true, nav: true, view: <Users /> },
   { path: "/audit", title: "Audit", admin: true, nav: true, view: <Audit /> },

@@ -11,6 +11,7 @@ import { Pagination } from "../../components/Pagination";
 import { SearchBox } from "../../components/SearchBox";
 import { usePagedList } from "../../hooks/usePagedList";
 import { ago } from "../../lib/format";
+import { Link } from "../../router/Link";
 import { useToast } from "../toast/context";
 
 export function ApiKeys() {
@@ -122,6 +123,7 @@ function NewToken({ created, onDone }: { created: CreatedApiKey; onDone: () => v
         <h2>“{created.label}” is ready</h2>
         <p className="dim">Copy the key now. It is shown only once and cannot be recovered, only replaced.</p>
         <code className="token-box">{created.token}</code>
+        <p className="hint dim">Use it with the base URL and model names on the <Link to="/connect">Connect</Link> page.</p>
         <div className="row">
           <button className="btn primary" type="button" onClick={() => void copy()}>
             {copied === "yes" ? "Copied" : copied === "failed" ? "Select and copy it manually" : "Copy key"}
