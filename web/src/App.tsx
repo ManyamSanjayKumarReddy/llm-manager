@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { BRAND } from "./brand";
 import { Logo } from "./components/Logo";
+import { NavMenu } from "./components/NavMenu";
 import { AuthProvider } from "./features/auth/AuthProvider";
 import { useAuth, useUser } from "./features/auth/context";
 import { LoginPage } from "./features/auth/LoginPage";
@@ -48,12 +49,24 @@ function Root() {
   return <NotFound signedIn={signedIn} />;
 }
 
+/** The navigation: pages sharing a group become one drop-down; a group left with a single page is a plain link. */
+function navEntries(tabs: DashboardPage[]): { label: string; pages: DashboardPage[] }[] {
+  const entries: { label: string; pages: DashboardPage[] }[] = [];
+  for (const tab of tabs) {
+    const group = tab.group ? entries.find((e) => e.label === tab.group) : undefined;
+    if (group) group.pages.push(tab);
+    else entries.push({ label: tab.group ?? tab.title, pages: [tab] });
+  }
+  return entries;
+}
+
 function Shell({ page }: { page: DashboardPage }) {
   const me = useUser();
   const { signOut } = useAuth();
   // Admin-only tabs are enforced by the API too; hiding them here is just tidiness.
   const tabs = PAGES.filter((p) => p.nav && (!p.admin || me.role === "admin"));
   const highlighted = page.parent ?? page.path;
+  const entries = navEntries(tabs);
 
   useEffect(() => {
     document.title = `${page.title} · ${BRAND.name}`;
@@ -75,11 +88,16 @@ function Shell({ page }: { page: DashboardPage }) {
       <header className="shell-bar">
         <Logo to="/" />
         <nav className="shell-nav" aria-label="Sections">
-          {tabs.map((tab) => (
-            <Link key={tab.path} to={tab.path} className="nav-item" aria-current={tab.path === highlighted ? "page" : undefined}>
-              {tab.title}
-            </Link>
-          ))}
+          {entries.map(({ label, pages }) => {
+            const only = pages.length === 1 ? pages[0] : undefined;
+            return only ? (
+              <Link key={only.path} to={only.path} className="nav-item" aria-current={only.path === highlighted ? "page" : undefined}>
+                {only.title}
+              </Link>
+            ) : (
+              <NavMenu key={label} label={label} pages={pages} current={highlighted} />
+            );
+          })}
         </nav>
         <div className="who">
           <span className="avatar" aria-hidden="true">{me.username.slice(0, 1)}</span>

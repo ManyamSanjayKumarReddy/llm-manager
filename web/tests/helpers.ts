@@ -1,3 +1,4 @@
+import { screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 
 /** Put the address bar at ``path`` (before rendering), without reloading. */
@@ -50,3 +51,22 @@ export function page<T>(items: T[], query: URLSearchParams, total = items.length
 }
 
 export const stats = [{ model: "gpt-oss-20b", requests: 7, errors: 1, p50_ms: 1200, p95_ms: 1500, avg_queue_wait_ms: 900 }];
+
+/** Go to a page from the top navigation, opening its drop-down first if it has one. */
+export async function openPage(user: { click: (el: Element) => Promise<void> }, name: string): Promise<void> {
+  const nav = await screen.findByRole("navigation", { name: "Sections" });
+  const link = within(nav).queryByRole("link", { name });
+  if (link) {
+    await user.click(link);
+    return;
+  }
+  for (const button of within(nav).queryAllByRole("button")) {
+    await user.click(button);
+    const inMenu = within(nav).queryByRole("link", { name });
+    if (inMenu) {
+      await user.click(inMenu);
+      return;
+    }
+  }
+  throw new Error(`no navigation item called ${name}`);
+}

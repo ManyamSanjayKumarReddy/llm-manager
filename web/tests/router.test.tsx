@@ -6,7 +6,7 @@ import { setCsrfToken } from "../src/api/client";
 import { App } from "../src/App";
 import { findPage, PAGES, safeNext } from "../src/pages";
 import { parseLocation } from "../src/router/router";
-import { mockApi, page, stats, status, visit } from "./helpers";
+import { mockApi, openPage, page, stats, status, visit } from "./helpers";
 
 const admin = { username: "root", role: "admin", csrf_token: "c" };
 const notLoggedIn = () => ({ status: 401, body: { detail: "not logged in" } });
@@ -32,7 +32,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); setCsr
 describe("addresses", () => {
   it("are real paths, never hashes", () => {
     for (const p of PAGES) expect(p.path).toMatch(/^\/[a-z-]+(\/[a-z-]+)?$/);
-    expect(PAGES.map((p) => p.path)).toEqual(["/overview", "/servers", "/models", "/history", "/api-keys", "/connect", "/usage", "/users", "/audit", "/account"]);
+    expect(PAGES.map((p) => p.path)).toEqual(["/overview", "/servers", "/models", "/usage", "/history", "/api-keys", "/connect", "/users", "/audit", "/account"]);
   });
 
   it("ignore a trailing slash", () => {
@@ -59,20 +59,51 @@ describe("moving around", () => {
     const user = userEvent.setup();
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Sections" });
-    const expected = { Overview: "/overview", Models: "/models", History: "/history", "API keys": "/api-keys", Users: "/users", Audit: "/audit", Account: "/account" };
+    const expected = { Overview: "/overview", Servers: "/servers", Models: "/models", Usage: "/usage", History: "/history", "API keys": "/api-keys", Connect: "/connect", Users: "/users", Audit: "/audit", Account: "/account" };
     for (const [label, href] of Object.entries(expected)) {
-      expect(within(nav).getByRole("link", { name: label })).toHaveAttribute("href", href);
+      // pages inside a closed drop-down are hidden but still real links
+      expect(within(nav).getByRole("link", { name: label, hidden: true })).toHaveAttribute("href", href);
     }
     expect(document.querySelector('a[href^="#"]')).toBeNull(); // nothing inside the dashboard uses a hash
 
     const pushed = vi.spyOn(window.history, "pushState");
+    await user.click(within(nav).getByRole("button", { name: "Activity" }));
     await user.click(within(nav).getByRole("link", { name: "History" }));
     expect(await screen.findByRole("heading", { level: 1, name: "History" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/history");
     expect(window.location.hash).toBe("");
     expect(pushed).toHaveBeenCalledTimes(1);
-    expect(within(nav).getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "History", hidden: true })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("button", { name: "Activity" })).toHaveAttribute("data-active", "true"); // the group shows where you are
+    expect(within(nav).queryByRole("link", { name: "History" })).not.toBeInTheDocument(); // the menu closed after choosing
     expect(within(nav).getByRole("link", { name: "Overview" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("groups the pages into drop-downs that open, switch and close", async () => {
+    visit("/overview");
+    mockApi(routes);
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Sections" });
+    const top = within(nav).getAllByRole("button").map((b) => b.textContent.trim());
+    expect(top).toEqual(["Fleet", "Activity", "Developers", "Admin"]);
+    expect(within(nav).queryByRole("link", { name: "Servers" })).not.toBeInTheDocument(); // closed
+
+    await user.click(within(nav).getByRole("button", { name: "Fleet" }));
+    expect(within(nav).getByRole("button", { name: "Fleet" })).toHaveAttribute("aria-expanded", "true");
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Overview", "Servers", "Models", "Account"]);
+
+    await user.click(within(nav).getByRole("button", { name: "Admin" })); // opening another one closes the first
+    expect(within(nav).getByRole("button", { name: "Fleet" })).toHaveAttribute("aria-expanded", "false");
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Overview", "Users", "Audit", "Account"]);
+
+    await user.keyboard("{Escape}");
+    expect(within(nav).getByRole("button", { name: "Admin" })).toHaveAttribute("aria-expanded", "false");
+    expect(within(nav).getByRole("button", { name: "Admin" })).toHaveFocus();
+
+    await user.click(within(nav).getByRole("button", { name: "Developers" }));
+    await user.click(document.body); // clicking elsewhere closes it too
+    expect(within(nav).getByRole("button", { name: "Developers" })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("the browser's back button returns to the previous screen", async () => {
@@ -80,7 +111,7 @@ describe("moving around", () => {
     mockApi(routes);
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("link", { name: "Users" }));
+    await openPage(user, "Users");
     expect(await screen.findByRole("heading", { level: 1, name: "Users" })).toBeInTheDocument();
     act(() => { window.history.back(); });
     expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
@@ -92,7 +123,7 @@ describe("moving around", () => {
     mockApi(routes);
     const user = userEvent.setup();
     render(<App />);
-    const link = await screen.findByRole("link", { name: "Audit" });
+    const link = await screen.findByRole("link", { name: "Account" });
     await user.keyboard("{Control>}");
     await user.click(link);
     await user.keyboard("{/Control}");

@@ -2,6 +2,7 @@ const PATHS = {
   plus: "M12 5v14M5 12h14",
   "arrow-left": "M19 12H5M11 6l-6 6 6 6",
   "arrow-right": "M5 12h14M13 6l6 6-6 6",
+  "chevron-down": "m6 9 6 6 6-6",
   "chevron-right": "m9 6 6 6-6 6",
   "chevron-left": "m15 6-6 6 6 6",
   "chevrons-left": "m11 17-5-5 5-5M18 17l-5-5 5-5",

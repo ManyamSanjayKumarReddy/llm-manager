@@ -17,8 +17,10 @@ export interface DashboardPage {
   title: string;
   /** Only administrators may open it; the API enforces this too. */
   admin?: boolean;
-  /** Shown as a tab in the navigation. */
+  /** Shown in the navigation. */
   nav?: boolean;
+  /** Pages with the same group share one drop-down; a group with a single visible page is a plain link. */
+  group?: string;
   /** For screens without a tab of their own: the tab to highlight. */
   parent?: string;
   view: ReactNode;
@@ -26,14 +28,14 @@ export interface DashboardPage {
 
 export const PAGES: readonly DashboardPage[] = [
   { path: "/overview", title: "Overview", nav: true, view: <Overview /> },
-  { path: "/servers", title: "Servers", admin: true, nav: true, view: <Servers /> },
-  { path: "/models", title: "Models", admin: true, nav: true, view: <Models /> },
-  { path: "/history", title: "History", nav: true, view: <History /> },
-  { path: "/api-keys", title: "API keys", admin: true, nav: true, view: <ApiKeys /> },
-  { path: "/connect", title: "Connect", nav: true, view: <Connect /> },
-  { path: "/usage", title: "Usage", admin: true, nav: true, view: <Usage /> },
-  { path: "/users", title: "Users", admin: true, nav: true, view: <Users /> },
-  { path: "/audit", title: "Audit", admin: true, nav: true, view: <Audit /> },
+  { path: "/servers", title: "Servers", admin: true, nav: true, group: "Fleet", view: <Servers /> },
+  { path: "/models", title: "Models", admin: true, nav: true, group: "Fleet", view: <Models /> },
+  { path: "/usage", title: "Usage", admin: true, nav: true, group: "Activity", view: <Usage /> },
+  { path: "/history", title: "History", nav: true, group: "Activity", view: <History /> },
+  { path: "/api-keys", title: "API keys", admin: true, nav: true, group: "Developers", view: <ApiKeys /> },
+  { path: "/connect", title: "Connect", nav: true, group: "Developers", view: <Connect /> },
+  { path: "/users", title: "Users", admin: true, nav: true, group: "Admin", view: <Users /> },
+  { path: "/audit", title: "Audit", admin: true, nav: true, group: "Admin", view: <Audit /> },
   { path: "/account", title: "Account", nav: true, view: <Account /> },
 ];
 

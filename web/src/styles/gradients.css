@@ -13,7 +13,7 @@
 .btn.danger:hover { background: linear-gradient(135deg, rgba(255, 107, 139, 0.18), rgba(255, 184, 77, 0.1)); }
 
 /* navigation, tabs, pages */
-.nav-item[aria-current="page"] { background: var(--grad-brand); color: #04121c; font-weight: 600; }
+.nav-item[aria-current="page"], .nav-item[data-active="true"] { background: var(--grad-brand); color: #04121c; font-weight: 600; }
 .segmented button[aria-pressed="true"], .code-tabs [role="tab"][aria-selected="true"] { background: var(--grad-brand); color: #04121c; font-weight: 600; }
 .page-btn[aria-current="page"] { background: var(--grad-brand); color: #04121c; border-color: transparent; font-weight: 600; }
 .chip-check input:checked + span { background: var(--grad-brand-soft); border-color: rgba(70, 183, 255, 0.7); }

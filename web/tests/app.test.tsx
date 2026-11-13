@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setCsrfToken } from "../src/api/client";
 import { App } from "../src/App";
-import { mockApi, page, stats, status, visit } from "./helpers";
+import { mockApi, openPage, page, stats, status, visit } from "./helpers";
 
 const admin = { username: "root", role: "admin", csrf_token: "csrf-1" };
 const viewer = { ...admin, role: "viewer" };
@@ -116,8 +116,10 @@ describe("roles", () => {
     mockApi({ ...base, "GET /api/auth/me": () => ({ body: viewer }) });
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Sections" });
-    for (const shown of ["Overview", "History", "Account"]) expect(within(nav).getByRole("link", { name: shown })).toBeInTheDocument();
-    for (const hidden of ["API keys", "Users", "Audit"]) expect(within(nav).queryByRole("link", { name: hidden })).not.toBeInTheDocument();
+    // a group left with one page for them is a plain link, not a drop-down
+    for (const shown of ["Overview", "History", "Connect", "Account"]) expect(within(nav).getByRole("link", { name: shown })).toBeInTheDocument();
+    expect(within(nav).queryAllByRole("button")).toHaveLength(0);
+    for (const hidden of ["Servers", "Models", "Usage", "API keys", "Users", "Audit"]) expect(within(nav).queryByRole("link", { name: hidden, hidden: true })).not.toBeInTheDocument();
   });
 
   it("sends a viewer who opens an admin address to the overview", async () => {
@@ -133,7 +135,7 @@ describe("history", () => {
     mockApi(base);
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("link", { name: "History" }));
+    await openPage(user, "History");
     const row = (await screen.findByRole("cell", { name: "gpt-oss-20b" })).closest("tr") as HTMLElement;
     expect(within(row).getByText("1.2 s")).toBeInTheDocument();
     expect(within(row).getByText("1.5 s")).toBeInTheDocument();
@@ -159,7 +161,7 @@ describe("api keys", () => {
     });
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("link", { name: "API keys" }));
+    await openPage(user, "API keys");
     await user.type(await screen.findByLabelText("Label"), "ci");
     await user.type(screen.getByLabelText("Requests per minute"), "10");
     await user.click(await screen.findByLabelText("gpt-oss-20b"));
@@ -191,7 +193,7 @@ describe("users", () => {
     });
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("link", { name: "Users" }));
+    await openPage(user, "Users");
     const rootRow = (await screen.findByRole("cell", { name: /root/ })).closest("tr") as HTMLElement;
     expect(within(rootRow).queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
 
