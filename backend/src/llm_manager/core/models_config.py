@@ -12,6 +12,9 @@ _MAX_KEY_LENGTH = 512
 _MAX_GPU_INDEX = 63
 
 
+DEFAULT_SERVER = "this-server"  # where models without a stated server live (the router's host)
+
+
 def _check_name(value: str) -> str:
     if not NAME_PATTERN.match(value):
         raise ValueError("name must be 1-64 characters: a-z, 0-9, dot, dash, underscore")
@@ -48,6 +51,7 @@ def _check_api_key(value: SecretStr) -> SecretStr:
 
 
 ModelName = Annotated[str, AfterValidator(_check_name)]
+ServerName = Annotated[str, AfterValidator(_check_name)]
 ModelUrl = Annotated[str, Field(max_length=300), AfterValidator(_check_url)]
 GpuSet = Annotated[frozenset[int], Field(min_length=1, max_length=16), AfterValidator(_check_gpus)]
 ApiKeyText = Annotated[SecretStr, Field(max_length=_MAX_KEY_LENGTH), AfterValidator(_check_api_key)]
@@ -62,7 +66,8 @@ class ModelSpec(BaseModel):
 
     url: ModelUrl = Field(description="vLLM base URL, e.g. http://127.0.0.1:8025")
     served_name: str | None = Field(None, max_length=200, description="name vLLM expects")
-    gpus: GpuSet = Field(description="GPUs occupied while awake")
+    server: ServerName = Field(DEFAULT_SERVER, description="the registered server it runs on")
+    gpus: GpuSet = Field(description="GPUs (numbers on that server) occupied while awake")
     idle_minutes: IdleMinutes = Field(10.0, description="sleep after this long without requests")
     priority: Priority = Field(
         0, description="higher wins when models that share a GPU are both waiting"
@@ -70,6 +75,15 @@ class ModelSpec(BaseModel):
     backend_api_key: ApiKeyText | None = Field(
         None, description="the container's own API key, if it was started with one"
     )
+
+    @property
+    def gpu_slots(self) -> frozenset[tuple[str, int]]:
+        """Physical GPUs this model occupies while awake: (server, number) pairs.
+
+        GPU numbers only mean something on one machine, so two models share a GPU only when
+        they are placed on the same server *and* list the same GPU number.
+        """
+        return frozenset((self.server, g) for g in self.gpus)
 
     @property
     def idle_seconds(self) -> float:

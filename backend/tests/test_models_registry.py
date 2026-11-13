@@ -13,6 +13,7 @@ from tests.conftest import PORTS, Stack, StackFactory, model_state
 PASSWORD = "a-long-passphrase"
 NEW = {
     "name": "model-d",
+    "server": "this-server",
     "url": f"http://127.0.0.1:{PORTS['d']}",
     "served_name": "org/d",
     "gpus": [2],
@@ -246,7 +247,13 @@ async def test_remove_a_model(make_stack: StackFactory) -> None:
     assert (
         await client.post(
             "/api/models",
-            json={"name": "c", "url": "http://127.0.0.1:9003", "gpus": [1], "served_name": "org/c"},
+            json={
+                "name": "c",
+                "server": "this-server",
+                "url": "http://127.0.0.1:9003",
+                "gpus": [1],
+                "served_name": "org/c",
+            },
         )
     ).status_code == 201
 

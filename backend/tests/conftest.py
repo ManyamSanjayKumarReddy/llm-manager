@@ -22,7 +22,7 @@ from tortoise.contrib.test import tortoise_test_context
 from llm_manager.api.container import Container
 from llm_manager.core.models_config import EngineConfig
 from llm_manager.core.settings import Settings
-from llm_manager.db.models import ManagedModel, Role, User
+from llm_manager.db.models import ManagedModel, Role, Server, User
 from llm_manager.main import create_app
 from tests.fakes import Dispatch, FakeVLLM, Ledger
 
@@ -208,10 +208,13 @@ async def make_stack(db: None) -> AsyncIterator[StackFactory]:
         fakes = {n: FakeVLLM(n, ledger) for n in GPUS}
         ledger.violations.clear()  # real containers are started one at a time (bootstrap script)
         # Models are registered in the database, as the dashboard does it.
+        server = await Server.create(name="this-server", gpu_count=8)
+        await Server.create(name="gpu-box-2", gpu_count=2)
         await ManagedModel.bulk_create(
             [
                 ManagedModel(
                     name=n,
+                    server=server,
                     url=f"http://127.0.0.1:{PORTS[n]}",
                     served_name=f"org/{n}",
                     gpus=sorted(GPUS[n]),

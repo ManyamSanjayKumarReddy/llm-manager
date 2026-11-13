@@ -11,6 +11,7 @@ from llm_manager.services.audit import AuditService
 from llm_manager.services.login import LoginService
 from llm_manager.services.models import ModelService
 from llm_manager.services.recorder import Recorder
+from llm_manager.services.servers import ServerService
 from llm_manager.services.sessions import SessionService
 from llm_manager.services.stats import StatsService
 from llm_manager.services.users import UserService
@@ -27,6 +28,7 @@ class Container:
     sessions: SessionService
     login: LoginService
     users: UserService
+    servers: ServerService
     models: ModelService
     api_keys: ApiKeyService
     stats: StatsService
@@ -45,6 +47,7 @@ def build_container(settings: Settings, manager: Manager, http: httpx.AsyncClien
         sessions=sessions,
         login=LoginService(settings, sessions, audit),
         users=UserService(settings, audit, sessions),
+        servers=ServerService(audit),
         models=ModelService(manager, audit, http),
         api_keys=ApiKeyService(audit),
         stats=StatsService(),

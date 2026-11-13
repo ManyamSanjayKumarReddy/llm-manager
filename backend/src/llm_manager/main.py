@@ -12,7 +12,16 @@ from tortoise.contrib.fastapi import RegisterTortoise
 from llm_manager.api.container import build_container
 from llm_manager.api.errors import register_exception_handlers
 from llm_manager.api.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
-from llm_manager.api.routers import api_keys, auth, health, models, proxy, status, users
+from llm_manager.api.routers import (
+    api_keys,
+    auth,
+    health,
+    models,
+    proxy,
+    servers,
+    status,
+    users,
+)
 from llm_manager.api.spa import SpaStaticFiles
 from llm_manager.core.logging import configure_logging, keep_query_parameters_out_of_logs
 from llm_manager.core.models_config import EngineConfig
@@ -100,7 +109,7 @@ def create_app(
     app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.allowed_origins)
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.cookie_secure)
     register_exception_handlers(app)
-    for module in (health, auth, users, api_keys, models, status, proxy):
+    for module in (health, auth, users, api_keys, servers, models, status, proxy):
         app.include_router(module.router)
     dist = settings.web_dist_path
     if dist is not None and (dist / "index.html").is_file():

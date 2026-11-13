@@ -227,7 +227,7 @@ class Manager:
             other
             for other in self.models.values()
             if other is not model
-            and other.spec.gpus & model.spec.gpus
+            and other.spec.gpu_slots & model.spec.gpu_slots
             and other.state not in (State.ASLEEP, State.DOWN)
         ]
         if any(o.state in (State.WAKING, State.SLEEPING) for o in in_the_way):
@@ -274,7 +274,7 @@ class Manager:
             if other is not model
             and other.waiting
             and other.state is State.ASLEEP
-            and other.spec.gpus & model.spec.gpus
+            and other.spec.gpu_slots & model.spec.gpu_slots
         ]
 
     # --------------------------------------------------------------- public API
@@ -392,7 +392,7 @@ class Manager:
             await self._go_to_sleep(model, "registered")
         else:
             await self._set_state(model, state)
-        self._event(model, "registered", f"{state.value} on GPU {sorted(spec.gpus)}")
+        self._event(model, "registered", f"{state.value} on {spec.server} GPU {sorted(spec.gpus)}")
         return model
 
     async def update(self, name: str, spec: ModelSpec) -> ModelRuntime:
@@ -401,13 +401,14 @@ class Manager:
             model = self._get(name)
             self._check_names(name, spec, ignore=name)
             old = model.spec
-            moved = (old.url, old.served_name, old.gpus) != (
+            moved = (old.url, old.served_name, old.server, old.gpus) != (
                 spec.url,
                 spec.served_name,
+                spec.server,
                 spec.gpus,
             )
             if moved:
-                self._require_idle(model, "change its address, name or GPUs")
+                self._require_idle(model, "change its address, name, server or GPUs")
             model.spec = spec
             if moved:
                 model.state = State.DOWN
@@ -531,14 +532,20 @@ class Manager:
     def snapshot(self, event_limit: int = 60) -> StatusOut:
         """Everything the dashboard shows live, in one call."""
         gpus: dict[str, GpuHolder | None] = {}
-        for gpu in sorted({g for m in self.models.values() for g in m.spec.gpus}):
+        slots = sorted({s for m in self.models.values() for s in m.spec.gpu_slots})
+        several_servers = len({server for server, _ in slots}) > 1
+        for slot in slots:
             holder = next(
-                (m for m in self.models.values() if gpu in m.spec.gpus and m.state in HOLDS_GPU),
+                (
+                    m
+                    for m in self.models.values()
+                    if slot in m.spec.gpu_slots and m.state in HOLDS_GPU
+                ),
                 None,
             )
-            gpus[str(gpu)] = (
-                GpuHolder(model=holder.name, state=holder.state.value) if holder else None
-            )
+            server, number = slot
+            key = f"{server} · GPU {number}" if several_servers else str(number)
+            gpus[key] = GpuHolder(model=holder.name, state=holder.state.value) if holder else None
         return StatusOut(
             uptime_s=round(time.time() - self.started_at),
             models=self.status(),

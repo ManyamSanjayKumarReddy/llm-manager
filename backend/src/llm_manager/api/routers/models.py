@@ -24,6 +24,7 @@ def _out(row: ManagedModel, manager: Manager) -> ModelOut:
     runtime = manager.models.get(row.name)
     return ModelOut(
         name=row.name,
+        server=row.server.name,
         url=row.url,
         served_name=row.served_name,
         gpus=sorted(row.gpus),

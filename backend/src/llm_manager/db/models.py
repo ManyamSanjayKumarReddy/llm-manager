@@ -133,11 +133,29 @@ class AuditLog(Model):
         table = "audit_log"
 
 
+class Server(Model):
+    """A machine with GPUs that runs vLLM containers. Models are placed on one."""
+
+    id = fields.UUIDField(primary_key=True)
+    name = fields.CharField(max_length=64, unique=True)
+    gpu_count = fields.IntField()
+    gpu_type = fields.CharField(max_length=100, null=True)  # free text, e.g. "2x RTX 4060 Ti 16 GB"
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        """Table options."""
+
+        table = "servers"
+
+
 class ManagedModel(Model):
     """A vLLM container the router manages. Registered from the dashboard."""
 
     id = fields.UUIDField(primary_key=True)
     name = fields.CharField(max_length=64, unique=True)
+    server: fields.ForeignKeyRelation[Server] = fields.ForeignKeyField(
+        "models.Server", related_name="models", on_delete=fields.RESTRICT
+    )
     url = fields.CharField(max_length=300)
     served_name = fields.CharField(max_length=200, null=True)
     gpus = fields.JSONField[list[int]]()

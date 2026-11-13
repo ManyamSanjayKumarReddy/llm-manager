@@ -110,9 +110,22 @@ export interface Page<T> {
   pages: number;
 }
 
+/** A machine with GPUs that models are placed on. */
+export interface Server {
+  name: string;
+  gpu_count: number;
+  /** What kind of GPUs, free text; null if not given. */
+  gpu_type: string | null;
+  /** Names of the models placed on it. */
+  models: string[];
+  created_at: string;
+}
+
 /** A model the router manages, with its live state. */
 export interface ManagedModel {
   name: string;
+  /** The registered server it runs on. */
+  server: string;
   url: string;
   served_name: string | null;
   gpus: number[];
@@ -128,6 +141,7 @@ export interface ManagedModel {
 
 export interface NewModel {
   name: string;
+  server: string;
   url: string;
   served_name: string | null;
   gpus: number[];
@@ -137,6 +151,7 @@ export interface NewModel {
 }
 
 export interface ModelChanges {
+  server?: string;
   url?: string;
   served_name?: string;
   gpus?: number[];

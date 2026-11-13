@@ -19,6 +19,7 @@ export function Models() {
   const list = usePagedList((q) => api.models({ ...q, q: search }), { q: search }, { initialPageSize: 10, everyMs: 5000 });
   // Everything registered, for spotting shared GPUs, taken names and taken ports while adding one.
   const everything = useAsync(() => api.models({ page: 1, pageSize: 100 }), undefined, list.total);
+  const servers = useAsync(() => api.servers(), undefined, list.total);
   const [adding, setAdding] = useState(false);
   const [managing, setManaging] = useState<string>();
   const managed = list.items.find((m) => m.name === managing);
@@ -60,7 +61,7 @@ export function Models() {
                 <div className={`table-wrap ${list.fetching ? "fetching" : ""}`}>
                   <table className="cards">
                     <thead>
-                      <tr><th>Model</th><th>State</th><th>GPUs</th><th>Priority</th><th>Sleeps after</th><th /></tr>
+                      <tr><th>Model</th><th>State</th><th>Server · GPUs</th><th>Priority</th><th>Sleeps after</th><th /></tr>
                     </thead>
                     <tbody>
                       {list.items.map((m) => <Row key={m.name} model={m} onOpen={() => { setManaging(m.name); }} />)}
@@ -77,6 +78,7 @@ export function Models() {
       <Modal open={adding} onClose={() => { setAdding(false); }} label="Add a model" size="lg">
         <AddModelDialog
           registered={everything.data?.items ?? []}
+          servers={servers.data ?? []}
           onClose={() => { setAdding(false); }}
           onRegistered={() => { setAdding(false); void list.reload(); void everything.reload(); }}
         />
@@ -86,6 +88,7 @@ export function Models() {
         {managed ? (
           <ManageModelDialog
             model={managed}
+            servers={servers.data ?? []}
             onClose={() => { setManaging(undefined); }}
             onChanged={(close) => { if (close) setManaging(undefined); void list.reload(); void everything.reload(); }}
           />
@@ -105,7 +108,7 @@ function Row({ model: m, onOpen }: { model: ManagedModel; onOpen: () => void }) 
         </button>
       </td>
       <td data-label="State"><Pill>{m.state}</Pill></td>
-      <td data-label="GPUs">{m.gpus.map((g) => <span key={g} className="gpu-chip">GPU {g}</span>)}</td>
+      <td data-label="Server · GPUs"><span className="dim">{m.server}</span> {m.gpus.map((g) => <span key={g} className="gpu-chip">GPU {g}</span>)}</td>
       <td data-label="Priority" className="num">{m.priority === 0 ? <span className="dim">Normal</span> : <span className="prio">{m.priority}</span>}</td>
       <td data-label="Sleeps after" className="num dim">{m.idle_minutes} min</td>
       <td data-label="" className="r">

@@ -6,6 +6,7 @@ import { History } from "./features/history/History";
 import { ApiKeys } from "./features/keys/ApiKeys";
 import { Models } from "./features/models/Models";
 import { Overview } from "./features/overview/Overview";
+import { Servers } from "./features/servers/Servers";
 import { Users } from "./features/users/Users";
 
 /** One screen of the dashboard (everything after signing in). */
@@ -23,6 +24,7 @@ export interface DashboardPage {
 
 export const PAGES: readonly DashboardPage[] = [
   { path: "/overview", title: "Overview", nav: true, view: <Overview /> },
+  { path: "/servers", title: "Servers", admin: true, nav: true, view: <Servers /> },
   { path: "/models", title: "Models", admin: true, nav: true, view: <Models /> },
   { path: "/history", title: "History", nav: true, view: <History /> },
   { path: "/api-keys", title: "API keys", admin: true, nav: true, view: <ApiKeys /> },

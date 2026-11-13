@@ -11,6 +11,7 @@ from llm_manager.core.models_config import (
     ModelName,
     ModelUrl,
     Priority,
+    ServerName,
 )
 from llm_manager.schemas.base import RequestSchema, ResponseSchema
 
@@ -19,6 +20,7 @@ class ModelCreate(RequestSchema):
     """An existing vLLM container to start managing."""
 
     name: ModelName = Field(description="what clients put in the request's 'model' field")
+    server: ServerName = Field(description="the registered server it runs on")
     url: ModelUrl
     served_name: str | None = Field(None, max_length=200, description="the name vLLM serves")
     gpus: GpuSet
@@ -30,6 +32,7 @@ class ModelCreate(RequestSchema):
 class ModelUpdate(RequestSchema):
     """Fields that can change on a registered model (the name cannot)."""
 
+    server: ServerName | None = None
     url: ModelUrl | None = None
     served_name: str | None = Field(None, max_length=200)
     gpus: GpuSet | None = None
@@ -44,6 +47,7 @@ class ModelOut(ResponseSchema):
     """A registered model with its live state."""
 
     name: str
+    server: str
     url: str
     served_name: str | None
     gpus: list[int]

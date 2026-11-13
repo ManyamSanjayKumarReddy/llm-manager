@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { api } from "../../api/client";
-import type { ManagedModel, ModelCheck } from "../../api/types";
+import type { ManagedModel, ModelCheck, Server } from "../../api/types";
 import { FormSection, PresetNumber, Switch } from "../../components/Controls";
 import { Icon } from "../../components/Icon";
 import { ModalHeader } from "../../components/Modal";
@@ -13,6 +13,8 @@ import {
   generateApiKey,
   servedNameFor,
 } from "../../lib/vllmCommand";
+import { Link } from "../../router/Link";
+import { serverLabel } from "../servers/label";
 import { useToast } from "../toast/context";
 import { CommandPanel } from "./CommandPanel";
 import { CONTEXTS, DEFAULTS, EXAMPLES, IDLES, LAST_STEP, PRIORITIES, STEP_NAMES, nameOf, paramsOf, problemsOf, suggestParser, urlOf, type Form } from "./form";
@@ -29,15 +31,16 @@ const SUBTITLES = [
 
 interface Props {
   registered: ManagedModel[];
+  servers: Server[];
   onClose: () => void;
   onRegistered: () => void;
 }
 
 /** A step-by-step popup: each step is short enough to see without scrolling. */
-export function AddModelDialog({ registered, onClose, onRegistered }: Props) {
+export function AddModelDialog({ registered, servers, onClose, onRegistered }: Props) {
   const toast = useToast();
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<Form>(DEFAULTS);
+  const [form, setForm] = useState<Form>({ ...DEFAULTS, server: servers[0]?.name ?? "" });
   const [revealed, setRevealed] = useState(false);
   const [check, setCheck] = useState<ModelCheck>();
   const [busy, setBusy] = useState<"check" | "register">();
@@ -59,7 +62,13 @@ export function AddModelDialog({ registered, onClose, onRegistered }: Props) {
   const perStep = problemsOf(form, registered);
   const here = step === LAST_STEP ? perStep.flat() : (perStep[step] ?? []);
   const allClear = perStep.every((p) => p.length === 0);
-  const sharing = registered.filter((m) => m.gpus.some((g) => form.gpus.includes(g)));
+  const chosen = servers.find((s) => s.name === form.server);
+  const sharing = registered.filter((m) => m.server === form.server && m.gpus.some((g) => form.gpus.includes(g)));
+  const pickServer = (server: string) => {
+    const count = servers.find((s) => s.name === server)?.gpu_count ?? 0;
+    const kept = form.gpus.filter((g) => g < count);
+    set({ server, gpus: kept.length > 0 ? kept : [0] });
+  };
   const command = buildVllmCommand(params);
   const servedName = servedNameFor(form.model, form.extraArgs);
 
@@ -78,6 +87,7 @@ export function AddModelDialog({ registered, onClose, onRegistered }: Props) {
     try {
       await api.registerModel({
         name,
+        server: form.server,
         url,
         served_name: servedName,
         gpus: form.gpus,
@@ -121,22 +131,36 @@ export function AddModelDialog({ registered, onClose, onRegistered }: Props) {
                 <button key={example} type="button" className="chip-btn" onClick={() => { pickModel(example); }}>{example}</button>
               ))}
             </div>
+            {servers.length === 0 ? (
+              <div className="callout">
+                <strong>Register a server first.</strong> Models are placed on a server so GPU numbers are unambiguous. Add one on the <Link to="/servers">Servers</Link> page, then come back.
+              </div>
+            ) : (
+              <Field label="Server it runs on">
+                <select className="input" value={form.server} onChange={(e) => { pickServer(e.target.value); }}>
+                  {servers.map((s) => <option key={s.name} value={s.name}>{serverLabel(s)}</option>)}
+                </select>
+              </Field>
+            )}
             <div className="field-row">
               <Field label="Name clients use">
                 <input className="input" type="text" maxLength={64} spellCheck={false} autoCapitalize="none" value={name} onChange={(e) => { set({ name: e.target.value, nameEdited: true }); }} />
               </Field>
-              <Field label="Port on this machine">
+              <Field label="Port on that server">
                 <input className="input" type="number" min={1024} max={65535} inputMode="numeric" value={form.port} onChange={(e) => { set({ port: e.target.value }); }} />
               </Field>
             </div>
             <div className="field">
               <span>GPUs it fills while awake</span>
-              <GpuPicker value={form.gpus} onChange={(gpus) => { set({ gpus }); }} />
+              <GpuPicker count={chosen?.gpu_count ?? 0} value={form.gpus} onChange={(gpus) => { set({ gpus }); }} />
             </div>
             {form.gpus.length > 1 ? <p className="hint dim">The model is split across {form.gpus.length} GPUs; the command includes it.</p> : null}
+            {servers.length > 1 ? (
+              <p className="hint dim">Wakeful reaches the container at the address on the Advanced step. It starts as this machine; for another server, enter that server's address there.</p>
+            ) : null}
             {sharing.length > 0 ? (
               <div className="callout">
-                <strong>Shared GPU.</strong> {sharing.map((m) => m.name).join(", ")} already {sharing.length === 1 ? "uses" : "use"} {form.gpus.length === 1 ? "this GPU" : "one of these GPUs"}. That works: Wakeful loads one at a time and swaps them. Set a priority on the Sleep step to say which goes first.
+                <strong>Shared GPU.</strong> {sharing.map((m) => m.name).join(", ")} already {sharing.length === 1 ? "uses" : "use"} {form.gpus.length === 1 ? "this GPU" : "one of these GPUs"} on {form.server}. That works: Wakeful loads one at a time and swaps them. Set a priority on the Sleep step to say which goes first.
               </div>
             ) : null}
           </>

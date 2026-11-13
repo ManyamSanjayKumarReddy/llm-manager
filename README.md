@@ -18,6 +18,7 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 
 ## Scheduling
 
+- **Servers:** register each machine with GPUs on the Servers page (name and GPU count), then pick a server when you add a model. A GPU is a server plus a number, so GPU 0 on two different servers are different GPUs. Models only share a GPU when they are on the same server and list the same number.
 - Models that share a GPU are never awake together. A request for a sleeping model waits while the other finishes
   its running requests and sleeps, then the target wakes.
 - A model is never put to sleep while it has requests running. Equal priorities take turns (`MIN_AWAKE_S`).

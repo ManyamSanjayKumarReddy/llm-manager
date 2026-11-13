@@ -1,10 +1,7 @@
-/** The GPUs in this machine. (Change this list if the GPU box has a different number.) */
-const MACHINE_GPUS = [0, 1];
-
-/** Toggle buttons for the GPUs a model occupies while awake. */
-export function GpuPicker({ value, onChange }: { value: number[]; onChange: (gpus: number[]) => void }) {
-  // A model registered earlier may use a GPU outside this list: keep showing it so it can be changed.
-  const all = [...new Set([...MACHINE_GPUS, ...value])].sort((a, b) => a - b);
+/** Toggle buttons for the GPUs a model occupies while awake, on a server that has ``count`` GPUs. */
+export function GpuPicker({ count, value, onChange }: { count: number; value: number[]; onChange: (gpus: number[]) => void }) {
+  // Keep showing a GPU a model already uses even if it is outside the server's range, so it can be fixed.
+  const all = [...new Set([...Array.from({ length: count }, (_, i) => i), ...value])].sort((a, b) => a - b);
   return (
     <div className="chips" role="group" aria-label="GPUs">
       {all.map((gpu) => (

@@ -7,6 +7,8 @@ export interface Form {
   name: string;
   nameEdited: boolean;
   port: string;
+  /** The registered server the container runs on. */
+  server: string;
   gpus: number[];
   apiKey: string;
   hfToken: string;
@@ -33,6 +35,7 @@ export const DEFAULTS: Form = {
   name: "",
   nameEdited: false,
   port: "8025",
+  server: "",
   gpus: [0],
   apiKey: "",
   hfToken: "",
@@ -113,8 +116,9 @@ export function problemsOf(f: Form, registered: ManagedModel[]): string[][] {
   const all = vllmProblems(paramsOf(f));
   const name = nameOf(f);
   if (registered.some((m) => m.name === name)) all.push(`A model named “${name}” is already registered. Choose another name.`);
-  const taken = registered.find((m) => new URL(m.url).port === f.port);
-  if (taken) all.push(`Port ${f.port} is already used by “${taken.name}”.`);
+  if (f.server === "") all.push("Choose the server this model runs on.");
+  const taken = registered.find((m) => m.server === f.server && new URL(m.url).port === f.port);
+  if (taken) all.push(`Port ${f.port} is already used by “${taken.name}” on ${taken.server}.`);
   if (!/^https?:\/\/\S+$/.test(urlOf(f))) all.push("Container address: it must start with http:// or https://.");
   if (!(Number(f.idle) > 0)) all.push("Sleep after idle: a number of minutes above 0.");
   const priority = Number(f.priority);

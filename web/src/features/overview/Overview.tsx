@@ -77,7 +77,7 @@ function Content({ data }: { data: StatusData }) {
             <div className="gpus">
               {Object.entries(data.gpus).map(([id, holder]) => (
                 <div key={id} className={`gpu ${holder ? "used" : ""}`}>
-                  <b>GPU {id}</b>
+                  <b>{/^\d+$/.test(id) ? `GPU ${id}` : id}</b>
                   <span>{holder ? holder.model : "Free"}</span>
                   {holder ? <Pill>{holder.state}</Pill> : null}
                 </div>

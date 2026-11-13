@@ -7,7 +7,7 @@ from tortoise.expressions import Q
 
 from llm_manager.core.errors import InvalidInputError, NotFoundError
 from llm_manager.core.models_config import ModelSpec
-from llm_manager.db.models import ManagedModel
+from llm_manager.db.models import ManagedModel, Server
 from llm_manager.engine import Manager
 from llm_manager.schemas.models import ModelCheck, ModelCheckRequest, ModelCreate, ModelUpdate
 from llm_manager.services.audit import AuditService
@@ -18,6 +18,7 @@ _CLEARABLE = {"served_name", "backend_api_key"}
 
 def _to_spec(row: ManagedModel) -> ModelSpec:
     return ModelSpec(
+        server=row.server.name,
         url=row.url,
         served_name=row.served_name,
         gpus=frozenset(row.gpus),
@@ -33,7 +34,7 @@ class ModelStore:
     @staticmethod
     async def specs() -> dict[str, ModelSpec]:
         """Every registered model, by name."""
-        rows = await ManagedModel.all().order_by("name")
+        rows = await ManagedModel.all().prefetch_related("server").order_by("name")
         return {row.name: _to_spec(row) for row in rows}
 
 
@@ -43,6 +44,18 @@ def _refused(response: httpx.Response | None) -> bool:
         httpx.codes.UNAUTHORIZED,
         httpx.codes.FORBIDDEN,
     }
+
+
+async def _server_for(name: str, gpus: frozenset[int]) -> Server:
+    """The registered server ``name``, which must have every GPU in ``gpus``."""
+    server = await Server.get_or_none(name=name)
+    if server is None:
+        raise InvalidInputError(f"server '{name}' is not registered: add it on the Servers page")
+    if max(gpus) >= server.gpu_count:
+        raise InvalidInputError(
+            f"{name} has {server.gpu_count} GPU(s), numbered 0 to {server.gpu_count - 1}"
+        )
+    return server
 
 
 class ModelService:
@@ -57,7 +70,7 @@ class ModelService:
         self, *, q: str | None, offset: int, limit: int
     ) -> tuple[list[ManagedModel], int]:
         """One page of registered models by name; ``q`` searches name and served name."""
-        query = ManagedModel.all()
+        query = ManagedModel.all().prefetch_related("server")
         if q and q.strip():
             term = q.strip()
             query = query.filter(Q(name__icontains=term) | Q(served_name__icontains=term))
@@ -66,7 +79,9 @@ class ModelService:
 
     async def create(self, body: ModelCreate, *, actor: str, ip: str | None) -> ManagedModel:
         """Register an existing container. If it is awake it is put to sleep."""
+        server = await _server_for(body.server, body.gpus)
         spec = ModelSpec(
+            server=server.name,
             url=body.url,
             served_name=body.served_name,
             gpus=body.gpus,
@@ -78,6 +93,7 @@ class ModelService:
         try:
             row = await ManagedModel.create(
                 name=body.name,
+                server=server,
                 url=spec.url,
                 served_name=spec.served_name,
                 gpus=sorted(spec.gpus),
@@ -97,7 +113,7 @@ class ModelService:
         self, name: str, body: ModelUpdate, *, actor: str, ip: str | None
     ) -> ManagedModel:
         """Change a model's settings. Where it runs can only change while it is idle."""
-        row = await ManagedModel.get_or_none(name=name)
+        row = await ManagedModel.get_or_none(name=name).prefetch_related("server")
         if row is None:
             raise NotFoundError(f"model '{name}' is not registered")
         unknown = set(body.clear) - _CLEARABLE
@@ -105,6 +121,7 @@ class ModelService:
             raise InvalidInputError(f"cannot clear: {', '.join(sorted(unknown))}")
         changes = body.model_dump(exclude_unset=True, exclude={"clear"}, exclude_none=True)
         merged = {
+            "server": row.server.name,
             "url": row.url,
             "served_name": row.served_name,
             "gpus": frozenset(row.gpus),
@@ -115,7 +132,9 @@ class ModelService:
             **dict.fromkeys(body.clear),
         }
         spec = ModelSpec.model_validate(merged)
+        server = await _server_for(spec.server, spec.gpus)
         await self._manager.update(name, spec)
+        row.server = server
         row.url = spec.url
         row.served_name = spec.served_name
         row.gpus = sorted(spec.gpus)

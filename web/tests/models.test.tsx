@@ -171,8 +171,8 @@ describe("vLLM command", () => {
 });
 
 describe("form problems", () => {
-  const form = (change: Partial<Form>): Form => ({ ...DEFAULTS, model: "openai/gpt-oss-20b", ...change });
-  const registered = [{ name: "taken", url: "http://127.0.0.1:9000", served_name: null, gpus: [0], idle_minutes: 10, priority: 0, has_api_key: false, created_at: "", state: "asleep", inflight: 0, waiting: 0 }];
+  const form = (change: Partial<Form>): Form => ({ ...DEFAULTS, model: "openai/gpt-oss-20b", server: "this-server", ...change });
+  const registered = [{ name: "taken", server: "this-server", url: "http://127.0.0.1:9000", served_name: null, gpus: [0], idle_minutes: 10, priority: 0, has_api_key: false, created_at: "", state: "asleep", inflight: 0, waiting: 0 }];
 
   it("files each problem under the step where it can be fixed", () => {
     expect(problemsOf(form({}), []).flat()).toEqual([]);
@@ -193,9 +193,10 @@ describe("form problems", () => {
 describe("Models screen", () => {
   const admin = { username: "root", role: "admin", csrf_token: "csrf-1" };
   const row = (name: string, extra: Record<string, unknown> = {}) => ({
-    name, url: "http://127.0.0.1:8025", served_name: `org/${name}`, gpus: [0], idle_minutes: 10, priority: 0,
+    name, server: "this-server", url: "http://127.0.0.1:8025", served_name: `org/${name}`, gpus: [0], idle_minutes: 10, priority: 0,
     has_api_key: false, created_at: "2026-01-01T00:00:00Z", state: "asleep", inflight: 0, waiting: 0, ...extra,
   });
+  const servers = [{ name: "this-server", gpu_count: 2, gpu_type: null, models: [], created_at: "2026-01-01T00:00:00Z" }];
   const ok = { reachable: true, sleep_endpoints: true, state: "awake", served_models: ["openai/new-one"], served_name_found: true, key_accepted: null, problems: [] };
   const next = async (user: ReturnType<typeof userEvent.setup>, times = 1) => {
     for (let i = 0; i < times; i++) await user.click(screen.getByRole("button", { name: /^Next/ }));
@@ -213,6 +214,7 @@ describe("Models screen", () => {
     mockApi({
       "GET /api/auth/me": () => ({ body: admin }),
       "GET /api/status": () => ({ body: status }),
+      "GET /api/servers": () => ({ body: servers }),
       "GET /api/models": (_, q) => ({ body: page(typeof models === "function" ? models() : models, q) }),
       ...more,
     });
@@ -242,7 +244,7 @@ describe("Models screen", () => {
     expect(screen.queryByText(/models.yaml/)).not.toBeInTheDocument();
   });
 
-  it("offers only the two GPUs of this machine", async () => {
+  it("offers only the GPUs the chosen server has", async () => {
     withModels([]);
     const user = userEvent.setup();
     render(<App />);
@@ -271,8 +273,8 @@ describe("Models screen", () => {
     expect(within(dialog).getByRole("button", { name: /^Next/ })).toBeDisabled();
     await user.type(within(dialog).getByLabelText("Hugging Face model"), "openai/new-one");
     expect(within(dialog).getByLabelText("Name clients use")).toHaveValue("new-one");
-    await user.clear(within(dialog).getByLabelText("Port on this machine")); // 8025 is taken by "alpha"
-    await user.type(within(dialog).getByLabelText("Port on this machine"), "9100");
+    await user.clear(within(dialog).getByLabelText("Port on that server")); // 8025 is taken by "alpha"
+    await user.type(within(dialog).getByLabelText("Port on that server"), "9100");
     await user.click(within(dialog).getByLabelText("GPU 1"));
     await next(user);
 
@@ -303,7 +305,7 @@ describe("Models screen", () => {
     await waitFor(() => { expect(calls.some((c) => c.key === "POST /api/models")).toBe(true); });
     const post = calls.find((c) => c.key === "POST /api/models");
     expect(JSON.parse(post?.init.body as string)).toEqual({
-      name: "new-one", url: "http://127.0.0.1:9100", served_name: "openai/new-one", gpus: [0, 1],
+      name: "new-one", server: "this-server", url: "http://127.0.0.1:9100", served_name: "openai/new-one", gpus: [0, 1],
       idle_minutes: 10, priority: 5, backend_api_key: key,
     });
     expect(await screen.findByText(/“new-one” registered/)).toBeInTheDocument();

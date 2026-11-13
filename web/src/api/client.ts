@@ -14,6 +14,7 @@ import type {
   NewUser,
   Page,
   RouterEvent,
+  Server,
   SessionInfo,
   StatusData,
   User,
@@ -131,6 +132,12 @@ export const api = {
     request<User>("PATCH", `/api/users/${id(userId)}`, changes),
   resetPassword: (userId: string, new_password: string) =>
     send("POST", `/api/users/${id(userId)}/password`, { new_password }),
+
+  servers: () => request<Server[]>("GET", "/api/servers"),
+  addServer: (server: { name: string; gpu_count: number; gpu_type: string | null }) => request<Server>("POST", "/api/servers", server),
+  updateServer: (name: string, changes: { gpu_count?: number; gpu_type?: string }) =>
+    request<Server>("PATCH", `/api/servers/${id(name)}`, changes),
+  removeServer: (name: string) => send("DELETE", `/api/servers/${id(name)}`),
 
   models: (q: ListQuery & { q?: string }) => request<Page<ManagedModel>>("GET", `/api/models${query(q)}`),
   registerModel: (model: NewModel) => request<ManagedModel>("POST", "/api/models", model),

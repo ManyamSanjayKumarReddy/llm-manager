@@ -1,30 +1,34 @@
 import { useState, type SubmitEvent } from "react";
 
 import { api } from "../../api/client";
-import type { ManagedModel, ModelChanges } from "../../api/types";
+import type { ManagedModel, ModelChanges, Server } from "../../api/types";
 import { FormSection, PresetNumber } from "../../components/Controls";
 import { Icon } from "../../components/Icon";
 import { ModalHeader } from "../../components/Modal";
 import { Field, Pill } from "../../components/ui";
+import { serverLabel } from "../servers/label";
 import { useToast } from "../toast/context";
 import { IDLES, PRIORITIES } from "./form";
 import { GpuPicker } from "./GpuPicker";
 
 interface Props {
   model: ManagedModel;
+  servers: Server[];
   onClose: () => void;
   /** Something changed on the server: refresh the list (and close if ``close``). */
   onChanged: (close: boolean) => void;
 }
 
 /** Everything about one registered model: its settings, putting it to sleep, and removing it. */
-export function ManageModelDialog({ model, onClose, onChanged }: Props) {
+export function ManageModelDialog({ model, servers, onClose, onChanged }: Props) {
   const toast = useToast();
   const [priority, setPriority] = useState(String(model.priority));
   const [idle, setIdle] = useState(String(model.idle_minutes));
   const [url, setUrl] = useState(model.url);
   const [served, setServed] = useState(model.served_name ?? "");
+  const [server, setServer] = useState(model.server);
   const [gpus, setGpus] = useState(model.gpus);
+  const gpuCount = servers.find((s) => s.name === server)?.gpu_count ?? 0;
   const [newKey, setNewKey] = useState("");
   const [removeKey, setRemoveKey] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -49,6 +53,7 @@ export function ManageModelDialog({ model, onClose, onChanged }: Props) {
     if (Number(priority) !== model.priority) changes.priority = Number(priority);
     if (Number(idle) !== model.idle_minutes) changes.idle_minutes = Number(idle);
     if (url !== model.url) changes.url = url;
+    if (server !== model.server) changes.server = server;
     if (gpus.join() !== model.gpus.join()) changes.gpus = gpus;
     const clear: NonNullable<ModelChanges["clear"]> = [];
     if (served !== (model.served_name ?? "")) {
@@ -98,7 +103,13 @@ export function ManageModelDialog({ model, onClose, onChanged }: Props) {
             <Field label="Name vLLM serves">
               <input className="input" type="text" value={served} onChange={(e) => { setServed(e.target.value.trim()); }} />
             </Field>
-            <div className="field"><span>GPUs</span><GpuPicker value={gpus} onChange={setGpus} /></div>
+            <Field label="Server">
+              <select className="input" value={server} onChange={(e) => { setServer(e.target.value); setGpus((g) => g.filter((n) => n < (servers.find((s) => s.name === e.target.value)?.gpu_count ?? 0))); }}>
+                {servers.some((s) => s.name === server) ? null : <option value={server}>{server}</option>}
+                {servers.map((s) => <option key={s.name} value={s.name}>{serverLabel(s)}</option>)}
+              </select>
+            </Field>
+            <div className="field"><span>GPUs</span><GpuPicker count={gpuCount} value={gpus} onChange={setGpus} /></div>
           </fieldset>
         </FormSection>
       </div>

@@ -95,3 +95,12 @@ def test_a_key_does_not_show_up_when_a_model_is_printed() -> None:
     assert "super-secret-key" not in repr(model)
     assert "super-secret-key" not in str(model.model_dump())
     assert "super-secret-key" not in model.model_dump_json()
+
+
+def test_gpus_only_clash_on_the_same_server() -> None:
+    one = spec(server="box-1", gpus=[0, 1])
+    same_box = spec(server="box-1", gpus=[1])
+    other_box = spec(server="box-2", gpus=[0, 1])
+
+    assert one.gpu_slots & same_box.gpu_slots
+    assert not one.gpu_slots & other_box.gpu_slots  # same numbers, different machine
