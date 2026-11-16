@@ -177,8 +177,9 @@ StackFactory = Callable[..., Awaitable[Stack]]
 
 
 @pytest_asyncio.fixture
-async def make_stack(db: None) -> AsyncIterator[StackFactory]:
+async def make_stack(db: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[StackFactory]:
     """Factory building the app; keyword arguments override engine and settings values."""
+    monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 0.1)  # real value: seconds
     cleanups: list[tuple[contextlib.AbstractAsyncContextManager[Any], Stack]] = []
 
     async def _make(**overrides: object) -> Stack:

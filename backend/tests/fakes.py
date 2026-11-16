@@ -53,6 +53,7 @@ class FakeVLLM:
             0.0  # like vLLM: an aborted request still occupies the engine for a moment
         )
         self.metrics_enabled = True
+        self.abort_lag_s = 0.0  # a cancelled request keeps the engine busy this long (see sleep)
         self.api_key: str | None = (
             None  # like `vllm serve --api-key`: protects everything but /health
         )
@@ -131,6 +132,9 @@ class FakeVLLM:
             self.active += 1
             try:
                 await asyncio.sleep(body.get("work_s", self.work_s))
+            except asyncio.CancelledError:
+                self.ghost_until = max(self.ghost_until, time.monotonic() + self.abort_lag_s)
+                raise
             finally:
                 self.active -= 1
             self.served += 1

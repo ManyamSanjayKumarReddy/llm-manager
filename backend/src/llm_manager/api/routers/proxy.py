@@ -98,13 +98,15 @@ async def proxy(
 
     released = False
 
-    def finish(status_code: int | None, usage: TokenUsage | None = None) -> None:
+    def finish(
+        status_code: int | None, usage: TokenUsage | None = None, *, aborted: bool = False
+    ) -> None:
         """Release the model slot and log the request, exactly once."""
         nonlocal released
         if released:
             return
         released = True
-        manager.release(model)
+        manager.release(model, aborted=aborted)
         container.recorder.record_request(
             RequestRecord(
                 model=model.name,
@@ -129,17 +131,19 @@ async def proxy(
         upstream = await stop.run(container.http.send(upstream_request, stream=True))
     except _StoppedError:
         stop.close()
-        finish(_STOPPED)
+        finish(_STOPPED, aborted=True)
         manager.record_result(model, _STOPPED)
         raise UnavailableError(_STOPPED_MESSAGE, _RETRY_AFTER_STOPPED_S) from None
     except httpx.HTTPError as exc:
         stop.close()
-        finish(None)
+        finish(None, aborted=True)
         manager.record_result(model, None)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"backend error: {exc}") from exc
     except BaseException:
         stop.close()
-        finish(None)  # never leave the slot taken, e.g. when the server is shutting down
+        finish(
+            None, aborted=True
+        )  # never leave the slot taken, e.g. when the server is shutting down
         raise
     manager.record_result(model, upstream.status_code)
     is_event_stream = upstream.headers.get("content-type", "").startswith("text/event-stream")
@@ -150,6 +154,7 @@ async def proxy(
 
     async def stream() -> AsyncIterator[bytes]:
         final = upstream.status_code
+        completed = False
         chunks = upstream.aiter_raw().__aiter__()
         try:
             while True:
@@ -167,13 +172,16 @@ async def proxy(
                     yield chunk
                 elif out := events.feed(chunk):
                     yield out
-            if events is not None and final != _STOPPED and (rest := events.finish()):
+            completed = final != _STOPPED
+            if events is not None and completed and (rest := events.finish()):
                 yield rest
         finally:
             stop.close()
             await upstream.aclose()
             usage = events.usage if events is not None else tail.usage()
-            finish(final, usage)  # the slot is held until the last byte is sent
+            finish(
+                final, usage, aborted=not completed
+            )  # the slot is held until the last byte is sent
 
     return StreamingResponse(
         stream(),

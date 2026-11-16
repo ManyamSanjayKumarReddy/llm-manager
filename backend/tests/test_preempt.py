@@ -180,12 +180,32 @@ async def test_a_model_whose_engine_never_goes_idle_is_not_slept(
     assert stack.ledger.violations == []  # b was never put to sleep under a running engine
 
 
-async def test_without_metrics_the_model_is_slept_at_once(make_stack: StackFactory) -> None:
+async def test_a_cancelled_request_is_given_time_to_drain_before_its_model_sleeps(
+    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real crash: vLLM's gauges stayed at 0, so only a fixed pause protects the engine."""
+    monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 1.0)
     stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
-    stack.fakes["b"].metrics_enabled = False  # an older or locked-down vLLM: old behaviour
+    stack.fakes["b"].metrics_enabled = False  # as seen on the production containers
+    stack.fakes["b"].abort_lag_s = 0.8  # vLLM drops the aborted request this long after the cancel
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
     await until_busy(stack, "b")
+    started = time.monotonic()
     assert (await stack.chat(token, "a")).status_code == 200
-    await running
+    assert time.monotonic() - started >= 0.9  # a waited for b's engine to drain
+    assert (await running).status_code == 503
+    assert stack.ledger.violations == []
+
+
+async def test_a_model_is_slept_without_delay_when_nothing_was_cancelled(
+    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 5.0)
+    stack = await make_stack(min_awake_s=0.1)
+    token = await stack.api_key()
+    assert (await stack.chat(token, "b")).status_code == 200
+    started = time.monotonic()
+    assert (await stack.chat(token, "a")).status_code == 200  # swap: b finished normally
+    assert time.monotonic() - started < 2.0
     assert stack.ledger.violations == []

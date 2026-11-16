@@ -46,6 +46,7 @@ from llm_manager.schemas.status import EventOut, GpuHolder, ModelStatus, StatusO
 log = logging.getLogger(__name__)
 
 _RECHECK_INTERVAL_S = 1.0  # waiters re-evaluate at least this often (timers expire silently)
+_ABORT_SETTLE_S = 3.0  # after a cancelled request, give vLLM this long to drop it before /sleep
 _ASLEEP_CHECK_S = 1.0  # a sleeping container is asked whether it is still there at most this often
 _MIN_REPORTED_WAIT_S = 0.05  # shorter waits are not counted as "had to wait"
 _EVENT_HISTORY = 200
@@ -152,6 +153,10 @@ class Manager:
 
     async def _go_to_sleep(self, model: ModelRuntime, reason: str) -> bool:
         """Sleep a model already marked SLEEPING. Returns True if it is now asleep."""
+        # vLLM drops a cancelled request only when its engine next looks at its inbox. A /sleep
+        # that lands first frees the GPU under that request and kills the engine.
+        if (settle := model.aborted_at + _ABORT_SETTLE_S - time.monotonic()) > 0:
+            await asyncio.sleep(settle)
         try:
             await self._backend.sleep(model.spec)
         except BackendError as exc:
@@ -349,10 +354,16 @@ class Manager:
         if not task.cancelled() and task.exception() is None:
             self.release(model)
 
-    def release(self, model: ModelRuntime) -> None:
-        """Give back a slot. Synchronous on purpose: must work while a request is cancelled."""
+    def release(self, model: ModelRuntime, *, aborted: bool = False) -> None:
+        """Give back a slot. Synchronous on purpose: must work while a request is cancelled.
+
+        ``aborted`` means the request did not finish: the client left or it was stopped. vLLM
+        only drops such a request a moment later, so the model must not be slept right away.
+        """
         model.inflight = max(0, model.inflight - 1)
         model.last_used = time.monotonic()
+        if aborted:
+            model.aborted_at = model.last_used
         self._spawn(self._notify())
 
     @staticmethod
