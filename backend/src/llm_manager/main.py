@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -37,6 +38,18 @@ from llm_manager.services.scheduler_settings import stored_engine_config
 
 _CONNECT_TIMEOUT_S = 5.0
 _WRITE_TIMEOUT_S = 30.0
+
+log = logging.getLogger(__name__)
+
+
+async def _run_manager(manager: Manager) -> None:
+    """Check where every container is, then keep the idle-sleep reaper running."""
+    try:
+        await manager.startup()
+    except Exception:
+        # Requests are released either way; the reaper re-adopts containers it can reach later.
+        log.exception("startup check failed")
+    await manager.run_reaper()
 
 
 def create_app(
@@ -81,7 +94,9 @@ def create_app(
             )
             # Models are registered in the dashboard and kept in the database.
             models = await ModelStore.specs()
-            container = build_container(settings, Manager(timings, backend, models), http)
+            container = build_container(
+                settings, Manager(timings, backend, models, starting=True), http
+            )
             app.state.container = container
             container.manager.event_sink = container.recorder.record_event
 
@@ -89,8 +104,8 @@ def create_app(
                 asyncio.create_task(container.recorder.run(), name="recorder"),
                 asyncio.create_task(run_maintenance(settings), name="maintenance"),
             ]
-            await container.manager.startup()
-            background.append(asyncio.create_task(container.manager.run_reaper(), name="reaper"))
+            # The server answers at once; requests for a model wait until this has finished.
+            background.append(asyncio.create_task(_run_manager(container.manager), name="manager"))
             try:
                 yield
             finally:

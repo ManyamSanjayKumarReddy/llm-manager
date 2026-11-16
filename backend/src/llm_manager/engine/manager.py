@@ -74,11 +74,15 @@ class Manager:
         config: EngineConfig,
         backend: VllmBackend,
         models: dict[str, ModelSpec] | None = None,
+        *,
+        starting: bool = False,
     ) -> None:
         self.config = config
         self._backend = backend
         self.models = {name: ModelRuntime(name, spec) for name, spec in (models or {}).items()}
         self._cond = asyncio.Condition()
+        # True until ``startup`` has found out where every container is. Requests wait for it.
+        self._starting = starting
         self._tasks: set[asyncio.Task[Any]] = set()
         self.started_at = time.time()
         self.events: deque[EventOut] = deque(maxlen=_EVENT_HISTORY)  # newest last
@@ -208,6 +212,8 @@ class Manager:
     def _decide(self, model: ModelRuntime, waited_s: float = 0.0) -> _Verdict | _Swap:
         """Decide what a request for ``model`` must do. Called with the lock held."""
         now = time.monotonic()
+        if self._starting:
+            return _Verdict.WAIT  # states are not known yet; DOWN would be a guess
         if model.state is State.DOWN:
             raise UnavailableError(f"model {model.name} backend is down", _RETRY_AFTER_DOWN_S)
         if model.state is State.AWAKE:
@@ -454,16 +460,31 @@ class Manager:
 
     # ---------------------------------------------------------- background jobs
     async def startup(self) -> None:
-        """Find out where every container really is, then put all awake ones to sleep."""
-        for model in list(self.models.values()):
-            model.state = await self._probe(model)
-        for model in list(self.models.values()):
-            if model.state is State.AWAKE:
-                async with self._cond:
-                    model.state = State.SLEEPING
-                await self._go_to_sleep(model, "startup")
-        summary = ", ".join(f"{n}={m.state.value}" for n, m in self.models.items())
-        self._event(None, "startup", summary)
+        """Find out where every container really is, then put all awake ones to sleep.
+
+        Meant to run in the background while the server already answers: requests for a
+        model wait (up to the queue timeout) until this has finished.
+        """
+        self._starting = True
+        try:
+            for model in list(self.models.values()):
+                model.state = await self._probe(model)
+            for model in list(self.models.values()):
+                if model.state is State.AWAKE:
+                    async with self._cond:
+                        model.state = State.SLEEPING
+                    await self._go_to_sleep(model, "startup")
+            summary = ", ".join(f"{n}={m.state.value}" for n, m in self.models.items())
+            self._event(None, "startup", summary)
+        finally:
+            async with self._cond:
+                self._starting = False
+                self._cond.notify_all()
+
+    async def wait_until_started(self) -> None:
+        """Return once ``startup`` has finished (at once if it never began)."""
+        async with self._cond:
+            await self._cond.wait_for(lambda: not self._starting)
 
     async def reap_once(self) -> None:
         """Sleep models that have been idle too long; re-adopt containers that came back."""

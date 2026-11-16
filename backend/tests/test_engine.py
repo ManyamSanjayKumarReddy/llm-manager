@@ -141,3 +141,23 @@ async def test_backend_errors_are_counted_and_passed_through(make_stack: StackFa
     assert response.status_code == 500  # the model's own error is not rewritten
     model = stack.container.manager.models["a"]
     assert (model.requests, model.errors) == (1, 1)
+
+
+async def test_requests_wait_for_the_startup_check_instead_of_failing(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    manager = stack.container.manager
+    token = await stack.api_key()
+    stack.fakes["a"].sleep_s = 0.4  # a slow startup check: a is awake and must be put to sleep
+    stack.fakes["a"].sleeping = False
+    stack.ledger.wake("a")
+    manager._starting = True  # as right after a restart: the app is up, the check is running
+    request = asyncio.create_task(stack.chat(token, "a"))
+    await asyncio.sleep(0.15)
+    assert not request.done()  # waiting, not rejected with "backend is down"
+    startup = asyncio.create_task(manager.startup())
+    response = await request
+    await startup
+    assert response.status_code == 200
+    assert stack.ledger.violations == []

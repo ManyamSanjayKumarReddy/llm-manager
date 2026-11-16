@@ -233,6 +233,7 @@ async def make_stack(db: None) -> AsyncIterator[StackFactory]:
         app = create_app(settings, config, http_client=backend, manage_orm=False)
         lifespan = app.router.lifespan_context(app)
         await lifespan.__aenter__()
+        await app.state.container.manager.wait_until_started()  # the server answers before this
         stack = Stack(app, app.state.container, fakes, ledger, dispatch)
         cleanups.append((lifespan, stack))
         return stack
