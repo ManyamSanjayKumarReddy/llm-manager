@@ -32,6 +32,7 @@ class ModelRuntime:
     inflight: int = 0  # requests being served right now
     waiting: int = 0  # requests waiting for this model to become ready
     last_used: float = field(default_factory=time.monotonic)
+    checked_at: float = field(default_factory=time.monotonic)  # last asked: is it still there?
     awake_since: float = field(default_factory=time.monotonic)
     # Set while a higher-priority model has asked for this model's running requests to stop.
     preempt_event: asyncio.Event = field(default_factory=asyncio.Event)

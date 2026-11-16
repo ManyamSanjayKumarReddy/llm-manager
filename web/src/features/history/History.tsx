@@ -17,7 +17,7 @@ const WINDOWS: readonly (readonly [number, string])[] = [
   [720, "30 days"],
 ];
 
-const KINDS = ["woke", "sleep", "wake_failed", "sleep_failed", "rejected", "preempt", "back_online", "startup"] as const;
+const KINDS = ["woke", "sleep", "wake_failed", "sleep_failed", "rejected", "preempt", "went_down", "back_online", "startup"] as const;
 
 export function History() {
   const [hours, setHours] = useState(24);

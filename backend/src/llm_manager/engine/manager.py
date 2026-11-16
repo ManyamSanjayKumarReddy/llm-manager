@@ -46,6 +46,7 @@ from llm_manager.schemas.status import EventOut, GpuHolder, ModelStatus, StatusO
 log = logging.getLogger(__name__)
 
 _RECHECK_INTERVAL_S = 1.0  # waiters re-evaluate at least this often (timers expire silently)
+_ASLEEP_CHECK_S = 1.0  # a sleeping container is asked whether it is still there at most this often
 _MIN_REPORTED_WAIT_S = 0.05  # shorter waits are not counted as "had to wait"
 _EVENT_HISTORY = 200
 _RETRY_AFTER_QUEUE_S = 10
@@ -476,6 +477,8 @@ class Manager:
                     await self._go_to_sleep(model, "startup")
             summary = ", ".join(f"{n}={m.state.value}" for n, m in self.models.items())
             self._event(None, "startup", summary)
+            for model in self.models.values():
+                model.checked_at = time.monotonic()  # just probed: the next check is due later
         finally:
             async with self._cond:
                 self._starting = False
@@ -487,10 +490,11 @@ class Manager:
             await self._cond.wait_for(lambda: not self._starting)
 
     async def reap_once(self) -> None:
-        """Sleep models that have been idle too long; re-adopt containers that came back."""
+        """Sleep idle models, re-adopt containers that came back, notice ones that went away."""
         now = time.monotonic()
         idle: list[ModelRuntime] = []
         down: list[ModelRuntime] = []
+        asleep: list[ModelRuntime] = []
         async with self._cond:
             for model in self.models.values():
                 if (
@@ -502,6 +506,9 @@ class Manager:
                     idle.append(model)
                 elif model.state is State.DOWN:
                     down.append(model)
+                elif model.state is State.ASLEEP and now - model.checked_at >= _ASLEEP_CHECK_S:
+                    model.checked_at = now
+                    asleep.append(model)
         await asyncio.gather(*(self._go_to_sleep(m, "idle") for m in idle))
         for model in down:
             found = await self._probe(model)
@@ -514,6 +521,27 @@ class Manager:
                 async with self._cond:
                     model.state = State.SLEEPING
                 await self._go_to_sleep(model, "adopted")
+        await asyncio.gather(*(self._recheck_asleep(m) for m in asleep))
+
+    async def _recheck_asleep(self, model: ModelRuntime) -> None:
+        """A model we think is asleep may have been stopped, or restarted (fresh, so awake)."""
+        found = await self._probe(model)
+        if found is State.ASLEEP:
+            return
+        async with self._cond:
+            if model.state is not State.ASLEEP:
+                return  # a request started waking it while we asked: its state is newer
+            if found is State.DOWN:
+                model.state = State.DOWN
+                self._cond.notify_all()
+            else:
+                model.state = State.SLEEPING
+        if found is State.DOWN:
+            self._event(model, "went_down", "container stopped or unreachable")
+            log.warning("model %s is no longer reachable", model.name)
+        else:
+            self._event(model, "back_online", "awake")
+            await self._go_to_sleep(model, "adopted")
 
     async def run_reaper(self) -> None:
         """Run ``reap_once`` forever."""

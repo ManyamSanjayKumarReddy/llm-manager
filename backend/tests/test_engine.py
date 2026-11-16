@@ -3,8 +3,9 @@
 import asyncio
 import random
 import time
+from collections.abc import Awaitable, Callable
 
-from tests.conftest import StackFactory, model_state
+from tests.conftest import PORTS, Stack, StackFactory, eventually, model_state, until_busy
 
 
 async def test_startup_puts_everything_to_sleep(make_stack: StackFactory) -> None:
@@ -38,7 +39,7 @@ async def test_swap_waits_for_running_requests(make_stack: StackFactory) -> None
     stack = await make_stack()
     token = await stack.api_key()
     slow = asyncio.create_task(stack.chat(token, "a", work_s=0.5))
-    await asyncio.sleep(0.1)
+    await until_busy(stack, "a")
     started = time.monotonic()
     response = await stack.chat(token, "b")  # shares GPU 0 with a: must wait for it
     assert response.status_code == 200
@@ -116,7 +117,7 @@ async def test_queue_timeout_gives_503_with_retry_after(make_stack: StackFactory
     stack = await make_stack(queue_timeout_s=0.3)
     token = await stack.api_key()
     slow = asyncio.create_task(stack.chat(token, "a", work_s=1.5))
-    await asyncio.sleep(0.1)
+    await until_busy(stack, "a")
     response = await stack.chat(token, "b")
     assert response.status_code == 503
     assert "retry-after" in response.headers
@@ -161,3 +162,58 @@ async def test_requests_wait_for_the_startup_check_instead_of_failing(
     await startup
     assert response.status_code == 200
     assert stack.ledger.violations == []
+
+
+async def test_a_stopped_container_is_noticed_while_the_model_is_asleep(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    assert model_state(stack, "a") == "asleep"
+    stack.dispatch.down.add(PORTS["a"])  # someone ran `docker stop`, or the engine crashed
+    await eventually(_is(stack, "a", "down"))
+    token = await stack.api_key()
+    assert (
+        await stack.chat(token, "a")
+    ).status_code == 503  # told so at once, not after a failed wake
+    stack.dispatch.down.discard(PORTS["a"])  # container started again: it comes up asleep
+    await eventually(_is(stack, "a", "asleep"))
+    assert (await stack.chat(token, "a")).status_code == 200
+
+
+async def test_a_container_that_restarted_awake_is_put_back_to_sleep(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    stack.dispatch.down.add(PORTS["b"])
+    await eventually(_is(stack, "b", "down"))
+    fake = stack.fakes["b"]
+    fake.sleeping = False  # a fresh vLLM container starts awake and holds GPU memory
+    stack.ledger.wake("b")
+    stack.dispatch.down.discard(PORTS["b"])
+    await eventually(_is(stack, "b", "asleep"))
+    assert fake.sleeping
+    assert stack.ledger.violations == []
+
+
+async def test_a_model_that_woke_behind_our_back_is_put_back_to_sleep(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    stack.fakes["c"].sleeping = False  # e.g. a restart between two checks
+    stack.ledger.wake("c")
+    await eventually(_is(stack, "c", "asleep"))
+    await eventually(_sleeping(stack, "c"))
+
+
+def _is(stack: Stack, name: str, state: str) -> Callable[[], Awaitable[bool]]:
+    async def check() -> bool:
+        return model_state(stack, name) == state
+
+    return check
+
+
+def _sleeping(stack: Stack, name: str) -> Callable[[], Awaitable[bool]]:
+    async def check() -> bool:
+        return stack.fakes[name].sleeping
+
+    return check

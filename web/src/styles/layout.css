@@ -92,7 +92,7 @@
 .timeline .d { width: 8px; height: 8px; border-radius: 50%; background: var(--tide); transform: translateY(-1px); }
 .timeline .d.woke { background: var(--foam); }
 .timeline .d.sleep { background: var(--faint); }
-.timeline .d.failed, .timeline .d.wake_failed, .timeline .d.sleep_failed, .timeline .d.rejected { background: var(--rose); }
+.timeline .d.failed, .timeline .d.wake_failed, .timeline .d.sleep_failed, .timeline .d.rejected, .timeline .d.went_down { background: var(--rose); }
 .timeline strong { font-weight: 500; }
 
 /* history */
