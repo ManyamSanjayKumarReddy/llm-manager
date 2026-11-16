@@ -130,4 +130,6 @@ Sleep mode with tensor parallelism 2 and Blackwell (RTX 5060 Ti) GPUs; Qwen3-VL-
 ## Notes
 
 Stickers come from [`stick-it-up`](https://www.npmjs.com/package/stick-it-up) (free for non-commercial use; check it suits you
-or remove `web/src/components/Stickers.tsx`). Fonts are self-hosted via `@fontsource`. No license file is included yet.
+or remove `web/src/components/Stickers.tsx`). Fonts are self-hosted via `@fontsource`.
+
+The code is proprietary: all rights reserved (see `LICENSE`).
