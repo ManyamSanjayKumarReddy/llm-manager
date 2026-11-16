@@ -46,7 +46,10 @@ from llm_manager.schemas.status import EventOut, GpuHolder, ModelStatus, StatusO
 log = logging.getLogger(__name__)
 
 _RECHECK_INTERVAL_S = 1.0  # waiters re-evaluate at least this often (timers expire silently)
-_ABORT_SETTLE_S = 3.0  # after a cancelled request, give vLLM this long to drop it before /sleep
+_ABORT_SETTLE_S = 3.0  # least time between a cancelled request and /sleep (see _drain)
+_CALIBRATE_GAP_S = 0.5  # before a stop: gap between the two counter readings
+_QUIET_S = 2.0  # the engine counts as stopped once it has processed no tokens for this long
+_QUIET_LIMIT_S = 20.0  # ... and a model still working after this long is left alone
 _ASLEEP_CHECK_S = 1.0  # a sleeping container is asked whether it is still there at most this often
 _MIN_REPORTED_WAIT_S = 0.05  # shorter waits are not counted as "had to wait"
 _EVENT_HISTORY = 200
@@ -133,6 +136,7 @@ class Manager:
                 model.awake_since = model.last_used = time.monotonic()
             if state in (State.AWAKE, State.ASLEEP):
                 model.preempt_event.clear()  # a stop request never outlives the swap it served
+                model.stop_requested = False
             if take_slot:  # hand the waker its slot before anyone can put the model to sleep
                 model.inflight += 1
             self._cond.notify_all()
@@ -153,11 +157,8 @@ class Manager:
 
     async def _go_to_sleep(self, model: ModelRuntime, reason: str) -> bool:
         """Sleep a model already marked SLEEPING. Returns True if it is now asleep."""
-        # vLLM drops a cancelled request only when its engine next looks at its inbox. A /sleep
-        # that lands first frees the GPU under that request and kills the engine.
-        if (settle := model.aborted_at + _ABORT_SETTLE_S - time.monotonic()) > 0:
-            await asyncio.sleep(settle)
         try:
+            drained = await self._drain(model)
             await self._backend.sleep(model.spec)
         except BackendError as exc:
             log.exception("sleeping %s failed", model.name)
@@ -166,10 +167,34 @@ class Manager:
         else:
             new_state = State.ASLEEP
             model.sleeps += 1
-            self._event(model, "sleep", reason)
+            model.aborted_at = float("-inf")
+            self._event(model, "sleep", f"{reason} ({drained})" if drained else reason)
             log.info("model %s -> asleep (%s)", model.name, reason)
         await self._set_state(model, new_state)
         return new_state is State.ASLEEP
+
+    async def _drain(self, model: ModelRuntime) -> str:
+        """Make sure vLLM has really dropped cancelled requests before its GPU memory is freed.
+
+        A /sleep that lands while the engine still has such a request frees the weights under
+        it, and the next step kills the engine ("illegal memory access"). vLLM says nothing
+        reliable about that (its "running" gauge keeps the last value or stays 0), but its token
+        counters only move while it works. So: wait until they have been still for a while.
+        Raises BackendError, and the model is not slept, if it is still working after the limit.
+        Returns a short description for the history ("" if nothing had been cancelled).
+        """
+        if model.aborted_at == float("-inf"):
+            return ""
+        if model.counters_work:
+            waited = await self._backend.wait_until_quiet(
+                model.spec, quiet_s=_QUIET_S, limit_s=_QUIET_LIMIT_S
+            )
+            how = f"engine quiet after {waited:.1f}s"
+        else:  # no usable counters: only a fixed pause is left
+            how = "fixed pause, engine activity unknown"
+        if (settle := model.aborted_at + _ABORT_SETTLE_S - time.monotonic()) > 0:
+            await asyncio.sleep(settle)
+        return how
 
     async def _wake_and_verify(self, model: ModelRuntime) -> None:
         """Call ``/wake_up`` and confirm the container no longer reports sleeping."""
@@ -272,11 +297,25 @@ class Manager:
         if any(o.spec.priority >= model.spec.priority for o in busy):
             return
         for victim in busy:
-            if not victim.preempt_event.is_set():
-                victim.preempt_event.set()
-                detail = f"{victim.inflight} running request(s) stopped for {model.name}"
-                self._event(victim, "preempt", f"{detail} (waited {waited_s:.0f}s)")
-                log.warning("model %s: %s after %.0fs", victim.name, detail, waited_s)
+            if not victim.stop_requested:
+                victim.stop_requested = True
+                self._spawn(self._stop_requests(victim, model.name, waited_s))
+
+    async def _stop_requests(self, victim: ModelRuntime, target: str, waited_s: float) -> None:
+        """Tell the proxy to cancel the victim's running requests, after checking its counters.
+
+        The victim is certainly busy now, so this is the moment to learn whether its token
+        counters move; later they are what proves the engine stopped (see ``_drain``).
+        """
+        moving = await self._backend.activity_moves(victim.spec, _CALIBRATE_GAP_S)
+        victim.counters_work = bool(moving) if moving is not None else None
+        if not victim.stop_requested or victim.state is not State.AWAKE or not victim.inflight:
+            return  # the requests ended (or the swap went ahead) while we were looking
+        victim.preempt_event.set()
+        detail = f"{victim.inflight} running request(s) stopped for {target}"
+        counters = "counters move" if victim.counters_work else "no usable counters"
+        self._event(victim, "preempt", f"{detail} (waited {waited_s:.0f}s, {counters})")
+        log.warning("model %s: %s after %.0fs (%s)", victim.name, detail, waited_s, counters)
 
     def _competitors(self, model: ModelRuntime) -> list[ModelRuntime]:
         """Sleeping models that share a GPU with ``model`` and have requests waiting."""
@@ -319,6 +358,7 @@ class Manager:
                         model.inflight += 1
                         model.last_used = time.monotonic()
                         model.preempt_event.clear()  # nobody more important is waiting any more
+                        model.stop_requested = False
                         return model
                     if isinstance(verdict, _Swap):
                         swap = verdict

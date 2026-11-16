@@ -19,6 +19,11 @@ def kinds(stack: object) -> list[str]:
     return [e.kind for e in stack.container.manager.events]  # type: ignore[attr-defined]
 
 
+def sleep_detail(stack: object, model: str) -> str:
+    events = stack.container.manager.events  # type: ignore[attr-defined]
+    return str([e.detail for e in events if e.kind == "sleep" and e.model == model][-1])
+
+
 async def test_a_waiting_priority_request_stops_the_running_one_after_the_set_time(
     make_stack: StackFactory,
 ) -> None:
@@ -154,48 +159,52 @@ async def test_the_victim_is_only_slept_once_its_engine_has_really_stopped(
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
     await until_busy(stack, "b")
-    stack.fakes["b"].ghost_until = time.monotonic() + 1.2  # still in its GPU step after the stop
+    stack.fakes["b"].abort_lag_s = 1.2  # still working on the request 1.2 s after the stop
     started = time.monotonic()
     served = await stack.chat(token, "a")
     assert served.status_code == 200
     assert time.monotonic() - started >= 1.0  # a waited for b's engine, not just for the cancel
     assert (await running).status_code == 503
     assert stack.ledger.violations == []
+    assert "engine quiet after" in sleep_detail(stack, "b")  # the history says how it was proven
 
 
-async def test_a_model_whose_engine_never_goes_idle_is_not_slept(
+async def test_a_model_whose_engine_never_goes_quiet_is_not_slept(
     make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("llm_manager.engine.backend._IDLE_LIMIT_S", 0.6)
+    """The cancel never reached vLLM: the request keeps generating, so the GPU is not freed."""
+    monkeypatch.setattr("llm_manager.engine.manager._QUIET_LIMIT_S", 0.6)
     stack = await make_stack(
         priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30, queue_timeout_s=2
     )
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
     await until_busy(stack, "b")
-    stack.fakes["b"].ghost_until = time.monotonic() + 60
+    stack.fakes["b"].abort_lag_s = 60
     assert (await stack.chat(token, "a")).status_code == 503  # could not free the GPU: retry later
     await running
     assert "sleep_failed" in kinds(stack)
-    assert stack.ledger.violations == []  # b was never put to sleep under a running engine
+    assert stack.ledger.violations == []  # b was never put to sleep under a working engine
 
 
-async def test_a_cancelled_request_is_given_time_to_drain_before_its_model_sleeps(
-    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("counters", ["missing", "frozen"])
+async def test_without_counters_a_fixed_pause_is_used(
+    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch, counters: str
 ) -> None:
-    """The real crash: vLLM's gauges stayed at 0, so only a fixed pause protects the engine."""
+    """No /metrics (or none that move while busy): all that is left is a fixed pause."""
     monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 1.0)
     stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
-    stack.fakes["b"].metrics_enabled = False  # as seen on the production containers
-    stack.fakes["b"].abort_lag_s = 0.8  # vLLM drops the aborted request this long after the cancel
+    stack.fakes["b"].counters = counters
+    stack.fakes["b"].abort_lag_s = 0.8  # vLLM drops the aborted request 0.8 s after the cancel
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
     await until_busy(stack, "b")
     started = time.monotonic()
     assert (await stack.chat(token, "a")).status_code == 200
-    assert time.monotonic() - started >= 0.9  # a waited for b's engine to drain
+    assert time.monotonic() - started >= 0.9  # the pause, not a quiet engine
     assert (await running).status_code == 503
     assert stack.ledger.violations == []
+    assert "fixed pause" in sleep_detail(stack, "b")
 
 
 async def test_a_model_is_slept_without_delay_when_nothing_was_cancelled(

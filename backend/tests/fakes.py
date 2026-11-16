@@ -53,6 +53,9 @@ class FakeVLLM:
             0.0  # like vLLM: an aborted request still occupies the engine for a moment
         )
         self.metrics_enabled = True
+        # "live": counters move while busy; "frozen": vLLM keeps no stats; "missing": no counters
+        self.counters = "live"
+        self.tokens = 0
         self.abort_lag_s = 0.0  # a cancelled request keeps the engine busy this long (see sleep)
         self.api_key: str | None = (
             None  # like `vllm serve --api-key`: protects everything but /health
@@ -108,13 +111,16 @@ class FakeVLLM:
         async def metrics() -> Response:
             if not self.metrics_enabled:
                 return JSONResponse({"error": "not found"}, status_code=404)
-            running = self.active + (1 if time.monotonic() < self.ghost_until else 0)
+            busy = self.active > 0 or time.monotonic() < self.ghost_until
+            if busy and self.counters == "live":
+                self.tokens += 10  # the engine is working: its token counters move
             labels = f'{{engine="0",model_name="org/{self.name}"}}'
-            text = (
-                "# HELP vllm:num_requests_running Number of requests in model execution batches.\n"
-                f"vllm:num_requests_running{labels} {running}.0\n"
-                f"vllm:num_requests_waiting{labels} 0.0\n"
-            )
+            # Like the real thing, the "running" gauge keeps its last value or stays 0: no use.
+            text = f"vllm:num_requests_running{labels} 0.0\n"
+            if self.counters != "missing":
+                text += f"vllm:generation_tokens_total{labels} {self.tokens}.0\n"
+                text += f"vllm:prompt_tokens_total{labels} 5.0\n"
+                text += f"vllm:generation_tokens_created{labels} 1.7e9\n"
             return Response(text, media_type="text/plain")
 
         @app.get("/is_sleeping")

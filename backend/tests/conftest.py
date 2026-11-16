@@ -179,7 +179,12 @@ StackFactory = Callable[..., Awaitable[Stack]]
 @pytest_asyncio.fixture
 async def make_stack(db: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[StackFactory]:
     """Factory building the app; keyword arguments override engine and settings values."""
-    monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 0.1)  # real value: seconds
+    # The real values are seconds; the tests only need the order of events.
+    monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 0.1)
+    monkeypatch.setattr("llm_manager.engine.manager._CALIBRATE_GAP_S", 0.05)
+    monkeypatch.setattr("llm_manager.engine.manager._QUIET_S", 0.2)
+    monkeypatch.setattr("llm_manager.engine.manager._QUIET_LIMIT_S", 3.0)
+    monkeypatch.setattr("llm_manager.engine.backend._POLL_S", 0.05)
     cleanups: list[tuple[contextlib.AbstractAsyncContextManager[Any], Stack]] = []
 
     async def _make(**overrides: object) -> Stack:
