@@ -51,11 +51,18 @@ _CALIBRATE_GAP_S = 0.5  # before a stop: gap between the two counter readings
 _QUIET_S = 2.0  # the engine counts as stopped once it has processed no tokens for this long
 _QUIET_LIMIT_S = 20.0  # ... and a model still working after this long is left alone
 _ASLEEP_CHECK_S = 1.0  # a sleeping container is asked whether it is still there at most this often
+_DOWN_RETRIES = 2  # a failed check is repeated this many times before the model counts as down
+_DOWN_RETRY_GAP_S = 1.0  # ... this far apart (a loaded server can miss one answer)
+_REPROBE_GAP_S = 1.0  # a request for a DOWN model asks whether it is back, at most this often
 _MIN_REPORTED_WAIT_S = 0.05  # shorter waits are not counted as "had to wait"
 _EVENT_HISTORY = 200
 _RETRY_AFTER_QUEUE_S = 10
 _RETRY_AFTER_DOWN_S = 10
 _RETRY_AFTER_FAILED_SWAP_S = 15
+
+
+def _is_down(model: ModelRuntime) -> bool:
+    return model.state is State.DOWN  # a function, so the type checker re-reads it after awaits
 
 
 class _Verdict(Enum):
@@ -185,6 +192,8 @@ class Manager:
         """
         if model.aborted_at == float("-inf"):
             return ""
+        if await self._backend.sleep_aborts_requests(model.spec):
+            return "vLLM aborts leftover requests itself"
         if model.counters_work:
             waited = await self._backend.wait_until_quiet(
                 model.spec, quiet_s=_QUIET_S, limit_s=_QUIET_LIMIT_S
@@ -302,20 +311,33 @@ class Manager:
                 self._spawn(self._stop_requests(victim, model.name, waited_s))
 
     async def _stop_requests(self, victim: ModelRuntime, target: str, waited_s: float) -> None:
-        """Tell the proxy to cancel the victim's running requests, after checking its counters.
+        """Cancel the victim's running requests, but only if its engine can be proven idle after.
 
-        The victim is certainly busy now, so this is the moment to learn whether its token
-        counters move; later they are what proves the engine stopped (see ``_drain``).
+        The victim is certainly busy now, so this is the moment to check that its token counters
+        move; later they are what proves the engine stopped (see ``_drain``). Without that proof
+        the requests are left alone: freeing the GPU under a request vLLM has not dropped kills
+        its engine, and nothing else says when it has.
         """
-        moving = await self._backend.activity_moves(victim.spec, _CALIBRATE_GAP_S)
-        victim.counters_work = bool(moving) if moving is not None else None
+        if await self._backend.sleep_aborts_requests(victim.spec):
+            problem = ""  # new vLLM: /sleep itself aborts what is still running, no proof needed
+        else:
+            problem = await self._backend.check_counters(victim.spec, _CALIBRATE_GAP_S)
+            victim.counters_work = not problem
         if not victim.stop_requested or victim.state is not State.AWAKE or not victim.inflight:
             return  # the requests ended (or the swap went ahead) while we were looking
+        if problem:
+            detail = (
+                f"NOT stopped for {target} after {waited_s:.0f}s, because the engine could not be "
+                f"proven idle afterwards: {problem}"
+            )
+            self._event(victim, "preempt", detail)
+            log.warning("model %s: %s", victim.name, detail)
+            return  # stop_requested stays set, so this is not tried again until the model sleeps
         victim.preempt_event.set()
         detail = f"{victim.inflight} running request(s) stopped for {target}"
-        counters = "counters move" if victim.counters_work else "no usable counters"
-        self._event(victim, "preempt", f"{detail} (waited {waited_s:.0f}s, {counters})")
-        log.warning("model %s: %s after %.0fs (%s)", victim.name, detail, waited_s, counters)
+        how = "token counters move" if victim.counters_work else "vLLM aborts on sleep"
+        self._event(victim, "preempt", f"{detail} (waited {waited_s:.0f}s, {how})")
+        log.warning("model %s: %s after %.0fs", victim.name, detail, waited_s)
 
     def _competitors(self, model: ModelRuntime) -> list[ModelRuntime]:
         """Sleeping models that share a GPU with ``model`` and have requests waiting."""
@@ -352,6 +374,8 @@ class Manager:
         try:
             while True:
                 swap: _Swap | None = None
+                if model.state is State.DOWN:  # maybe it is back: do not wait for the next sweep
+                    await self._readopt(model, min_gap_s=_REPROBE_GAP_S)
                 async with self._cond:
                     verdict = self._decide(model, time.monotonic() - waiting_since)
                     if verdict is _Verdict.GO:
@@ -562,21 +586,39 @@ class Manager:
                     asleep.append(model)
         await asyncio.gather(*(self._go_to_sleep(m, "idle") for m in idle))
         for model in down:
+            await self._readopt(model, min_gap_s=0.0)
+        await asyncio.gather(*(self._recheck_asleep(m) for m in asleep))
+
+    async def _readopt(self, model: ModelRuntime, *, min_gap_s: float) -> None:
+        """Ask a DOWN model whether it is back; adopt it (asleep, or put to sleep) if it is."""
+        now = time.monotonic()
+        if model.state is not State.DOWN or model.reprobing or now - model.checked_at < min_gap_s:
+            return
+        model.reprobing = True
+        model.checked_at = now
+        try:
             found = await self._probe(model)
             if found is State.DOWN:
-                continue
-            self._event(model, "back_online", found.value)
-            if found is State.ASLEEP:
-                await self._set_state(model, State.ASLEEP)
-            else:
-                async with self._cond:
-                    model.state = State.SLEEPING
-                await self._go_to_sleep(model, "adopted")
-        await asyncio.gather(*(self._recheck_asleep(m) for m in asleep))
+                return
+            async with self._cond:
+                if not _is_down(model):
+                    return  # someone else got there first
+                model.state = State.ASLEEP if found is State.ASLEEP else State.SLEEPING
+                self._cond.notify_all()
+        finally:
+            model.reprobing = False
+        self._event(model, "back_online", found.value)
+        if found is State.AWAKE:
+            await self._go_to_sleep(model, "adopted")
 
     async def _recheck_asleep(self, model: ModelRuntime) -> None:
         """A model we think is asleep may have been stopped, or restarted (fresh, so awake)."""
         found = await self._probe(model)
+        for _ in range(_DOWN_RETRIES):  # one missed answer is not a stopped container
+            if found is not State.DOWN:
+                break
+            await asyncio.sleep(_DOWN_RETRY_GAP_S)
+            found = await self._probe(model)
         if found is State.ASLEEP:
             return
         async with self._cond:

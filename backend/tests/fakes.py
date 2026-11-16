@@ -55,6 +55,8 @@ class FakeVLLM:
         self.metrics_enabled = True
         # "live": counters move while busy; "frozen": vLLM keeps no stats; "missing": no counters
         self.counters = "live"
+        self.fail_is_sleeping = 0  # the next N /is_sleeping calls fail
+        self.version = "0.10.1"  # from 0.17 on, /sleep aborts running requests itself
         self.tokens = 0
         self.abort_lag_s = 0.0  # a cancelled request keeps the engine busy this long (see sleep)
         self.api_key: str | None = (
@@ -78,6 +80,8 @@ class FakeVLLM:
 
         @app.post("/sleep")
         async def sleep(level: int = 1) -> JSONResponse:
+            if tuple(int(x) for x in self.version.split(".")[:2]) >= (0, 17):
+                self.ghost_until = 0.0  # the engine drops whatever it still held
             if self.active:
                 self.ledger.violations.append(f"{self.name} slept with {self.active} in flight")
             if time.monotonic() < self.ghost_until:
@@ -98,6 +102,10 @@ class FakeVLLM:
                 self.sleeping = False
                 self.ledger.wake(self.name)
             return JSONResponse({})
+
+        @app.get("/version")
+        async def version() -> dict[str, str]:
+            return {"version": self.version}
 
         @app.get("/health")
         async def health() -> JSONResponse:
@@ -123,8 +131,11 @@ class FakeVLLM:
                 text += f"vllm:generation_tokens_created{labels} 1.7e9\n"
             return Response(text, media_type="text/plain")
 
-        @app.get("/is_sleeping")
-        async def is_sleeping() -> dict[str, bool]:
+        @app.get("/is_sleeping", response_model=None)
+        async def is_sleeping() -> Response | dict[str, bool]:
+            if self.fail_is_sleeping > 0:  # a loaded server that misses an answer
+                self.fail_is_sleeping -= 1
+                return JSONResponse({"error": "busy"}, status_code=503)
             return {"is_sleeping": self.sleeping}
 
         @app.post("/v1/chat/completions", response_model=None)

@@ -185,6 +185,8 @@ async def make_stack(db: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator
     monkeypatch.setattr("llm_manager.engine.manager._QUIET_S", 0.2)
     monkeypatch.setattr("llm_manager.engine.manager._QUIET_LIMIT_S", 3.0)
     monkeypatch.setattr("llm_manager.engine.backend._POLL_S", 0.05)
+    monkeypatch.setattr("llm_manager.engine.manager._DOWN_RETRY_GAP_S", 0.05)
+    monkeypatch.setattr("llm_manager.engine.manager._REPROBE_GAP_S", 0.05)
     cleanups: list[tuple[contextlib.AbstractAsyncContextManager[Any], Stack]] = []
 
     async def _make(**overrides: object) -> Stack:

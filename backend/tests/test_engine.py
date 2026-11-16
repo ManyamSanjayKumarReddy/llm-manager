@@ -5,6 +5,7 @@ import random
 import time
 from collections.abc import Awaitable, Callable
 
+from llm_manager.engine.states import State
 from tests.conftest import PORTS, Stack, StackFactory, eventually, model_state, until_busy
 
 
@@ -217,3 +218,58 @@ def _sleeping(stack: Stack, name: str) -> Callable[[], Awaitable[bool]]:
         return stack.fakes[name].sleeping
 
     return check
+
+
+def _kinds(stack: Stack, kind: str) -> list[str]:
+    return [e.model or "" for e in stack.container.manager.events if e.kind == kind]
+
+
+async def test_a_single_missed_health_check_does_not_mark_a_model_down(
+    make_stack: StackFactory,
+) -> None:
+    """A loaded server can miss one answer; that must not make requests fail with a 503."""
+    stack = await make_stack()
+    fake = stack.fakes["a"]
+    fake.fail_is_sleeping = 1
+
+    async def missed() -> bool:
+        return fake.fail_is_sleeping == 0
+
+    await eventually(missed, timeout_s=4.0)  # the sweep has asked, and was not answered
+    await asyncio.sleep(0.3)  # time for the retries
+    assert model_state(stack, "a") == "asleep"
+    assert "a" not in _kinds(stack, "went_down")
+    assert (await stack.chat(await stack.api_key(), "a")).status_code == 200
+
+
+async def test_repeated_missed_health_checks_do_mark_a_model_down(make_stack: StackFactory) -> None:
+    stack = await make_stack()
+    stack.fakes["a"].fail_is_sleeping = 1000
+    await eventually(_is(stack, "a", "down"), timeout_s=5.0)
+    assert "a" in _kinds(stack, "went_down")
+
+
+async def test_a_request_for_a_down_model_checks_whether_it_is_back(
+    make_stack: StackFactory,
+) -> None:
+    """No waiting for the next sweep: a model wrongly (or no longer) down is served at once."""
+    stack = await make_stack(reaper_interval_s=60)  # the sweep will not get there first
+    model = stack.container.manager.models["a"]
+    model.state = State.DOWN  # marked down; the container is fine
+    model.checked_at = float("-inf")  # and nobody asked it for a while
+    response = await stack.chat(await stack.api_key(), "a")
+    assert response.status_code == 200
+    assert "a" in _kinds(stack, "back_online")
+
+
+async def test_a_request_for_a_really_down_model_is_still_refused_at_once(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack(reaper_interval_s=60)
+    model = stack.container.manager.models["a"]
+    model.state = State.DOWN
+    model.checked_at = float("-inf")
+    stack.dispatch.down.add(PORTS["a"])
+    started = time.monotonic()
+    assert (await stack.chat(await stack.api_key(), "a")).status_code == 503
+    assert time.monotonic() - started < 2.0

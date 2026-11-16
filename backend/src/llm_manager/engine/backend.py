@@ -15,6 +15,8 @@ _POLL_S = 0.5  # how often the token counters are read while waiting for a quiet
 _TOKEN_COUNTERS = re.compile(
     r"^vllm:(?:prompt|generation)_tokens_total(?:\{[^}]*\})?\s+([0-9.eE+-]+)\s*$", re.MULTILINE
 )
+_VERSION = re.compile(r"(\d+)\.(\d+)")
+_SLEEP_ABORTS_FROM = (0, 17)  # first vLLM release whose /sleep aborts in-flight requests
 
 
 class BackendError(Exception):
@@ -70,27 +72,48 @@ class VllmBackend:
             raise BackendError(str(exc) or type(exc).__name__) from exc
         return response
 
-    async def activity(self, spec: ModelSpec) -> float | None:
-        """Tokens the engine has processed so far, or None if vLLM does not report them."""
+    async def sleep_aborts_requests(self, spec: ModelSpec) -> bool:
+        """Does this vLLM abort running requests itself when it is put to sleep?
+
+        From 0.17 on, ``/sleep`` pauses the scheduler and aborts every in-flight request before it
+        frees GPU memory. Older versions free the memory under them, which kills the engine.
+        """
+        try:
+            response = await self._call("GET", spec, "/version", timeout_s=_PROBE_TIMEOUT_S)
+            found = _VERSION.match(str(response.json()["version"]))
+        except (BackendError, ValueError, KeyError, TypeError):
+            return False
+        return found is not None and (int(found[1]), int(found[2])) >= _SLEEP_ABORTS_FROM
+
+    async def _counters(self, spec: ModelSpec) -> tuple[float | None, str]:
+        """The engine's token total, or None plus the reason it could not be read."""
         try:
             response = await self._call("GET", spec, "/metrics", timeout_s=_PROBE_TIMEOUT_S)
-        except BackendError:
-            return None
+        except BackendError as exc:
+            return None, f"/metrics unreachable ({exc})"
         values = _TOKEN_COUNTERS.findall(response.text)
-        return sum(float(v) for v in values) if values else None
+        if not values:
+            return None, "/metrics has no token counters"
+        return sum(float(v) for v in values), ""
 
-    async def activity_moves(self, spec: ModelSpec, gap_s: float) -> bool | None:
-        """Do the token counters move? Only meaningful while the engine is busy.
+    async def activity(self, spec: ModelSpec) -> float | None:
+        """Tokens the engine has processed so far, or None if vLLM does not report them."""
+        return (await self._counters(spec))[0]
 
-        None if they cannot be read. False while busy means vLLM keeps no stats
-        (``--disable-log-stats``), so the counters cannot say when the engine is idle.
+    async def check_counters(self, spec: ModelSpec, gap_s: float) -> str:
+        """Can the token counters prove the engine idle? Call it while the engine is busy.
+
+        Returns "" if they move (they can), else the reason they cannot: unreachable, missing,
+        or frozen (vLLM keeps no stats, so they stand still even while it works).
         """
-        first = await self.activity(spec)
+        first, problem = await self._counters(spec)
         if first is None:
-            return None
+            return problem
         await asyncio.sleep(gap_s)
-        second = await self.activity(spec)
-        return None if second is None else second != first
+        second, problem = await self._counters(spec)
+        if second is None:
+            return problem
+        return "" if second != first else "token counters stand still while the engine is busy"
 
     async def wait_until_quiet(self, spec: ModelSpec, *, quiet_s: float, limit_s: float) -> float:
         """Wait until the engine has processed no tokens for ``quiet_s``; return the time waited.

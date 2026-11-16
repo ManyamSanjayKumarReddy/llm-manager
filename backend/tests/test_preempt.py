@@ -187,24 +187,52 @@ async def test_a_model_whose_engine_never_goes_quiet_is_not_slept(
     assert stack.ledger.violations == []  # b was never put to sleep under a working engine
 
 
-@pytest.mark.parametrize("counters", ["missing", "frozen"])
-async def test_without_counters_a_fixed_pause_is_used(
-    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch, counters: str
+@pytest.mark.parametrize(
+    ("counters", "metrics", "why"),
+    [
+        ("missing", True, "no token counters"),
+        ("frozen", True, "stand still"),
+        ("live", False, "unreachable"),
+    ],
+)
+async def test_without_proof_of_idleness_the_running_request_is_left_alone(
+    make_stack: StackFactory, counters: str, metrics: bool, why: str
 ) -> None:
-    """No /metrics (or none that move while busy): all that is left is a fixed pause."""
-    monkeypatch.setattr("llm_manager.engine.manager._ABORT_SETTLE_S", 1.0)
+    """If the engine cannot be proven idle after a stop, nothing is stopped (it would crash)."""
     stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
     stack.fakes["b"].counters = counters
-    stack.fakes["b"].abort_lag_s = 0.8  # vLLM drops the aborted request 0.8 s after the cancel
+    stack.fakes["b"].metrics_enabled = metrics
+    token = await stack.api_key()
+    running = asyncio.create_task(stack.chat(token, "b", work_s=1.5))
+    await until_busy(stack, "b")
+    served = await stack.chat(token, "a")  # waits for b to finish by itself
+    assert served.status_code == 200
+    assert (await running).status_code == 200  # b was not stopped
+    assert stack.ledger.violations == []
+    skipped = [e.detail for e in stack.container.manager.events if e.kind == "preempt"]
+    assert len(skipped) == 1  # said once, not every second
+    assert "NOT stopped" in skipped[0]
+    assert why in skipped[0]
+
+
+@pytest.mark.parametrize("counters", ["live", "missing", "frozen"])
+async def test_a_vllm_that_aborts_on_sleep_needs_no_proof_of_idleness(
+    make_stack: StackFactory, counters: str
+) -> None:
+    """vLLM 0.17+ aborts leftover requests inside /sleep: no proof needed, whatever /metrics is."""
+    stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
+    stack.fakes["b"].version = "0.18.0"
+    stack.fakes["b"].counters = counters
+    stack.fakes["b"].abort_lag_s = 30  # the cancel never reaches the engine ...
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
     await until_busy(stack, "b")
     started = time.monotonic()
     assert (await stack.chat(token, "a")).status_code == 200
-    assert time.monotonic() - started >= 0.9  # the pause, not a quiet engine
+    assert time.monotonic() - started < 2.5  # ... and nothing waits for it
     assert (await running).status_code == 503
-    assert stack.ledger.violations == []
-    assert "fixed pause" in sleep_detail(stack, "b")
+    assert stack.ledger.violations == []  # /sleep took the leftover request with it
+    assert "aborts" in sleep_detail(stack, "b")
 
 
 async def test_a_model_is_slept_without_delay_when_nothing_was_cancelled(

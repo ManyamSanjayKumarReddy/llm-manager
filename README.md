@@ -28,7 +28,9 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 - **Preemption (off by default):** a running request is normally never stopped. With stopping switched on (for example after 30 s), a request that has
   waited 30 s for a model with a **lower** priority stops that model's running requests (they get `503` + `Retry-After`;
   streams end with an error event) and takes the GPU. Equal or higher priorities are never stopped. Keep it below the queue timeout.
-  The stopped model is put to sleep only once vLLM has provably stopped working on the cancelled request (its token counters stand still
+  **Use vLLM 0.17 or newer for models that may be stopped:** from that version `/sleep` aborts running requests itself. Older versions free the GPU
+  under a request that has not been dropped yet and the engine crashes, so Wakeful then only stops a request if it can prove afterwards that the engine is idle:
+  the stopped model is put to sleep only once vLLM has provably stopped working on the cancelled request (its token counters stand still
   for 2 s; without usable counters, a 3 s pause). If it is still generating after 20 s it is left awake and the waiting request gets a `503` to retry,
   because freeing the GPU under a live request kills the vLLM engine. The History shows how it was proven.
 - **These timings are edited in the dashboard** (admin → *Scheduling*): queue timeout, turn length, priority hold, stopping running requests, wake/sleep limits. They are saved in the database and apply at once. The `QUEUE_TIMEOUT_S`, `MIN_AWAKE_S`, `PRIORITY_HOLD_S`, `PREEMPT_AFTER_S`, … environment variables only give the starting values until someone saves the page.

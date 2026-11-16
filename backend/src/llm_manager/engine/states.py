@@ -37,6 +37,7 @@ class ModelRuntime:
     awake_since: float = field(default_factory=time.monotonic)
     # Set while a higher-priority model has asked for this model's running requests to stop.
     preempt_event: asyncio.Event = field(default_factory=asyncio.Event)
+    reprobing: bool = False  # someone is already asking a DOWN model whether it is back
     stop_requested: bool = False  # a stop is being prepared or in force for this model
     # Do vLLM's token counters move while this model works? Learned just before a stop, when it
     # is certainly busy; None until then. Without it the engine cannot be proven idle.
