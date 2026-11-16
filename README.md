@@ -14,7 +14,7 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 |---|---|
 | `backend/` | FastAPI, Tortoise ORM, Pydantic, Aerich, uv |
 | `web/` | Dashboard and landing page: React + TypeScript + Vite (built to `web/dist`, served by the backend) |
-| `scripts/` | `make-cert.sh` (self-signed certificate), `bootstrap.sh` (start model containers one at a time) |
+| `scripts/` | `make-cert.sh` (self-signed certificate), `bootstrap.sh` (start model containers one at a time), `vllm-abort-sleep/` (build a vLLM 0.10.1 image whose `/sleep` aborts running requests, see Scheduling) |
 
 ## Scheduling
 
@@ -28,7 +28,7 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 - **Preemption (off by default):** a running request is normally never stopped. With stopping switched on (for example after 30 s), a request that has
   waited 30 s for a model with a **lower** priority stops that model's running requests (they get `503` + `Retry-After`;
   streams end with an error event) and takes the GPU. Equal or higher priorities are never stopped. Keep it below the queue timeout.
-  **Use vLLM 0.17 or newer for models that may be stopped:** from that version `/sleep` aborts running requests itself. Older versions free the GPU
+  **Use vLLM 0.17 or newer for models that may be stopped** (or the 0.10.1 image built by `scripts/vllm-abort-sleep`, for servers whose NVIDIA driver is too old for the 0.17+ images): from 0.17 `/sleep` aborts running requests itself. Older versions free the GPU
   under a request that has not been dropped yet and the engine crashes, so Wakeful then only stops a request if it can prove afterwards that the engine is idle:
   the stopped model is put to sleep only once vLLM has provably stopped working on the cancelled request (its token counters stand still
   for 2 s; without usable counters, a 3 s pause). If it is still generating after 20 s it is left awake and the waiting request gets a `503` to retry,

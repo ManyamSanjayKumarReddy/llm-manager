@@ -80,7 +80,8 @@ class FakeVLLM:
 
         @app.post("/sleep")
         async def sleep(level: int = 1) -> JSONResponse:
-            if tuple(int(x) for x in self.version.split(".")[:2]) >= (0, 17):
+            numbers = tuple(int(x) for x in self.version.split("+")[0].split(".")[:2])
+            if numbers >= (0, 17) or "abortsleep" in self.version:
                 self.ghost_until = 0.0  # the engine drops whatever it still held
             if self.active:
                 self.ledger.violations.append(f"{self.name} slept with {self.active} in flight")

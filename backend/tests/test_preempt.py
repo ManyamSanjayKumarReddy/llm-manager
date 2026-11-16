@@ -215,13 +215,21 @@ async def test_without_proof_of_idleness_the_running_request_is_left_alone(
     assert why in skipped[0]
 
 
-@pytest.mark.parametrize("counters", ["live", "missing", "frozen"])
+@pytest.mark.parametrize(
+    ("version", "counters"),
+    [
+        ("0.18.0", "live"),
+        ("0.18.0", "missing"),
+        ("0.18.0", "frozen"),
+        ("0.10.1+abortsleep", "missing"),  # the patched 0.10.1 image from scripts/vllm-abort-sleep
+    ],
+)
 async def test_a_vllm_that_aborts_on_sleep_needs_no_proof_of_idleness(
-    make_stack: StackFactory, counters: str
+    make_stack: StackFactory, version: str, counters: str
 ) -> None:
     """vLLM 0.17+ aborts leftover requests inside /sleep: no proof needed, whatever /metrics is."""
     stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
-    stack.fakes["b"].version = "0.18.0"
+    stack.fakes["b"].version = version
     stack.fakes["b"].counters = counters
     stack.fakes["b"].abort_lag_s = 30  # the cancel never reaches the engine ...
     token = await stack.api_key()

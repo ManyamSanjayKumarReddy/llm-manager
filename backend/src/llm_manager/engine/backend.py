@@ -17,6 +17,7 @@ _TOKEN_COUNTERS = re.compile(
 )
 _VERSION = re.compile(r"(\d+)\.(\d+)")
 _SLEEP_ABORTS_FROM = (0, 17)  # first vLLM release whose /sleep aborts in-flight requests
+_PATCH_MARKER = "abortsleep"  # added to the version by scripts/vllm-abort-sleep
 
 
 class BackendError(Exception):
@@ -76,13 +77,17 @@ class VllmBackend:
         """Does this vLLM abort running requests itself when it is put to sleep?
 
         From 0.17 on, ``/sleep`` pauses the scheduler and aborts every in-flight request before it
-        frees GPU memory. Older versions free the memory under them, which kills the engine.
+        frees GPU memory. Older versions free the memory under them, which kills the engine,
+        unless the image carries ``scripts/vllm-abort-sleep`` (its version ends in "+abortsleep").
         """
         try:
             response = await self._call("GET", spec, "/version", timeout_s=_PROBE_TIMEOUT_S)
-            found = _VERSION.match(str(response.json()["version"]))
+            version = str(response.json()["version"])
         except (BackendError, ValueError, KeyError, TypeError):
             return False
+        if _PATCH_MARKER in version:
+            return True
+        found = _VERSION.match(version)
         return found is not None and (int(found[1]), int(found[2])) >= _SLEEP_ABORTS_FROM
 
     async def _counters(self, spec: ModelSpec) -> tuple[float | None, str]:
