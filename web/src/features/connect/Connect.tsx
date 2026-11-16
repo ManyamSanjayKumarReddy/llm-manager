@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import { api } from "../../api/client";
 import { Icon } from "../../components/Icon";
-import { Reveal } from "../../components/Reveal";
 import { Alert, PageHead, Pill } from "../../components/ui";
 import { useAsync } from "../../hooks/useAsync";
 import { Link } from "../../router/Link";
@@ -54,19 +53,12 @@ function useCopy(): [boolean, (text: string) => Promise<void>] {
   return [copied, copy];
 }
 
-function CopyRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, copy] = useCopy();
   return (
-    <div className="connect-row">
-      <div className="connect-label">
-        <span>{label}</span>
-        {hint ? <span className="dim small-text">{hint}</span> : null}
-      </div>
-      <code className="connect-value">{value}</code>
-      <button type="button" className="btn small" onClick={() => void copy(value)} aria-label={`Copy ${label}`}>
-        <Icon name="copy" size={14} /> {copied ? "Copied" : "Copy"}
-      </button>
-    </div>
+    <button type="button" className="btn small" onClick={() => void copy(value)} aria-label={`Copy ${label}`}>
+      <Icon name="copy" size={14} /> {copied ? "Copied" : "Copy"}
+    </button>
   );
 }
 
@@ -76,8 +68,7 @@ export function Connect() {
   const status = useAsync(() => api.status(), 10_000);
   const base = `${window.location.origin}/v1`;
   const models = Object.entries(status.data?.models ?? {});
-  const [chosen, setChosen] = useState<string>();
-  const model = chosen && models.some(([n]) => n === chosen) ? chosen : (models[0]?.[0] ?? "your-model-name");
+  const model = models[0]?.[0] ?? "your-model-name";
   const [language, setLanguage] = useState<Language>("curl");
   const [copied, copy] = useCopy();
   const code = SNIPPETS[language](base, model);
@@ -85,81 +76,72 @@ export function Connect() {
   return (
     <div className="page">
       <PageHead eyebrow="Developers" title="Connect">
-        Everything a program needs to use your models: an address, a key and a model name. It works with any tool that speaks the OpenAI API.
+        What a program needs to use your models. It works with any tool that speaks the OpenAI API.
       </PageHead>
       <Alert notice={status.error ? { kind: "error", text: status.error } : undefined} />
 
-      <Reveal>
-        <section className="surface stack">
-          <div className="section-title"><h2>The three things you need</h2></div>
-          <CopyRow label="Base URL" value={base} hint="Put this where a tool asks for the OpenAI base URL." />
-          <div className="connect-row">
-            <div className="connect-label">
-              <span>API key</span>
-              <span className="dim small-text">A key is shown only once, when it is created.</span>
-            </div>
-            <code className="connect-value">{KEY}</code>
-            {me.role === "admin" ? <Link className="btn small primary" to="/api-keys">Create a key</Link> : <span className="dim small-text">Ask an admin</span>}
-          </div>
-          <p className="hint dim">Send it as <code>Authorization: Bearer {KEY}</code>. A key can be limited to certain models and a number of requests per minute. If a model you expect is refused with 403, the key is not allowed to use it.</p>
-        </section>
-      </Reveal>
+      <section className="surface stack">
+        <div className="section-title"><h2>Connection</h2></div>
+        <div className="table-wrap">
+          <table className="cards">
+            <thead><tr><th>Setting</th><th>Value</th><th /></tr></thead>
+            <tbody>
+              <tr>
+                <td className="primary"><strong>Base URL</strong></td>
+                <td data-label="Value"><code>{base}</code></td>
+                <td data-label=""><CopyButton value={base} label="Base URL" /></td>
+              </tr>
+              <tr>
+                <td className="primary"><strong>API key</strong></td>
+                <td data-label="Value"><code>Authorization: Bearer {KEY}</code></td>
+                <td data-label="">
+                  {me.role === "admin" ? <Link className="btn small" to="/api-keys">Create a key</Link> : <span className="dim small-text">Ask an admin</span>}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-      <Reveal>
-        <section className="surface stack">
-          <div className="section-title"><h2>Model name</h2><span className="count">{models.length} available</span></div>
-          {status.data && models.length === 0 ? <p className="no-match">No models are registered yet.</p> : null}
-          {models.map(([name, m]) => (
-            <ModelRow key={name} name={name} state={m.state} active={name === model} onPick={() => { setChosen(name); }} />
-          ))}
-          <p className="hint dim">Use the name exactly as shown in the <code>model</code> field. A model that is asleep is woken by your request, so the first answer takes a few seconds longer.</p>
-        </section>
-      </Reveal>
-
-      <Reveal>
-        <section className="surface stack">
-          <div className="section-title"><h2>Try it</h2><span className="count">using {model}</span></div>
-          <div className="code-card">
-            <div className="code-tabs" role="tablist" aria-label="Language">
-              {LANGUAGES.map(([value, label]) => (
-                <button key={value} type="button" role="tab" aria-selected={language === value} onClick={() => { setLanguage(value); }}>{label}</button>
+      <section className="surface stack">
+        <div className="section-title"><h2>Models</h2><span className="count">{models.length} available</span></div>
+        {status.data && models.length === 0 ? <p className="no-match">No models are registered yet.</p> : null}
+        <div className="table-wrap" hidden={models.length === 0}>
+          <table className="cards">
+            <thead><tr><th>Model name</th><th>State</th><th /></tr></thead>
+            <tbody>
+              {models.map(([name, m]) => (
+                <tr key={name}>
+                  <td className="primary"><code>{name}</code></td>
+                  <td data-label="State"><Pill>{m.state}</Pill></td>
+                  <td data-label=""><CopyButton value={name} label={name} /></td>
+                </tr>
               ))}
-              <button type="button" className="btn small copy-code" onClick={() => void copy(code)}>{copied ? "Copied" : "Copy"}</button>
-            </div>
-            <pre className="command" aria-label="Example request"><code>{code}</code></pre>
-          </div>
-          <p className="hint dim">Replace <code>{KEY}</code> with your key. Add <code>"stream": true</code> for streamed answers.</p>
-        </section>
-      </Reveal>
+            </tbody>
+          </table>
+        </div>
+        <p className="hint dim">Use the name as the <code>model</code> value. A sleeping model wakes on your request, so the first answer is a few seconds slower.</p>
+      </section>
 
-      <Reveal>
-        <section className="surface stack">
-          <div className="section-title"><h2>Good to know</h2></div>
-          <ul className="notes">
-            <li><strong>Retry on 503 and 429.</strong> 503 means the model is waking or another one is using its GPU. Wait the number of seconds in the <code>Retry-After</code> header and try again. 429 means your key reached its per-minute limit.</li>
-            <li><strong>See the list from code:</strong> <code>GET {base}/models</code> returns the models your key may use, without waking anything.</li>
-            <li><strong>Usage is tracked per key.</strong> Prompt and completion tokens appear on the Usage page, so give each program its own key.</li>
-          </ul>
-        </section>
-      </Reveal>
-    </div>
-  );
-}
+      <section className="surface stack">
+        <div className="section-title"><h2>Example</h2></div>
+        <div className="code-tabs" role="tablist" aria-label="Language">
+          {LANGUAGES.map(([value, label]) => (
+            <button key={value} type="button" role="tab" aria-selected={language === value} onClick={() => { setLanguage(value); }}>{label}</button>
+          ))}
+          <button type="button" className="btn small copy-code" onClick={() => void copy(code)}>{copied ? "Copied" : "Copy"}</button>
+        </div>
+        <pre className="command" aria-label="Example request"><code>{code}</code></pre>
+      </section>
 
-function ModelRow({ name, state, active, onPick }: { name: string; state: string; active: boolean; onPick: () => void }) {
-  const [copied, copy] = useCopy();
-  return (
-    <div className={`connect-row ${active ? "picked" : ""}`}>
-      <div className="connect-label">
-        <button type="button" className="row-open" onClick={onPick} aria-pressed={active} aria-label={`Use ${name} in the example`}>
-          <strong>{name}</strong>
-        </button>
-        <Pill>{state}</Pill>
-      </div>
-      <code className="connect-value">{name}</code>
-      <button type="button" className="btn small" onClick={() => void copy(name)} aria-label={`Copy ${name}`}>
-        <Icon name="copy" size={14} /> {copied ? "Copied" : "Copy"}
-      </button>
+      <section className="surface stack">
+        <div className="section-title"><h2>Good to know</h2></div>
+        <ul className="notes">
+          <li>On <code>503</code> or <code>429</code>, wait the <code>Retry-After</code> seconds and try again.</li>
+          <li><code>403</code> means your key is not allowed to use that model.</li>
+          <li><code>GET {base}/models</code> lists the models your key may use.</li>
+        </ul>
+      </section>
     </div>
   );
 }

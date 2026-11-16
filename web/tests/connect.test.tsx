@@ -26,26 +26,24 @@ describe("Connect screen", () => {
     mockApi(routes("admin"));
     render(<App />);
     expect(await screen.findByText(base)).toBeInTheDocument();
-    expect(screen.getAllByText("<API_KEY>").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Bearer <API_KEY>/).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Create a key" })).toHaveAttribute("href", "/api-keys");
     expect(await screen.findByRole("button", { name: "Copy gpt-oss-20b" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy qwen3-vl-8b" })).toBeInTheDocument();
   });
 
-  it("puts the chosen model and language into the example", async () => {
+  it("puts the first model and the chosen language into the example", async () => {
     mockApi(routes("admin"));
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByRole("button", { name: "Use gpt-oss-20b in the example" }); // models loaded
+    await screen.findByRole("button", { name: "Copy gpt-oss-20b" }); // models loaded
     const example = screen.getByLabelText("Example request");
     expect(example).toHaveTextContent(`curl ${base}/chat/completions`);
     expect(example).toHaveTextContent('"model": "gpt-oss-20b"');
-    await user.click(screen.getByRole("button", { name: "Use qwen3-vl-8b in the example" }));
-    expect(example).toHaveTextContent('"model": "qwen3-vl-8b"');
     await user.click(screen.getByRole("tab", { name: "Python" }));
     expect(example).toHaveTextContent(`OpenAI(base_url="${base}", api_key="<API_KEY>")`);
     await user.click(screen.getByRole("tab", { name: "JavaScript" }));
-    expect(example).toHaveTextContent('model: "qwen3-vl-8b"');
+    expect(example).toHaveTextContent('model: "gpt-oss-20b"');
   });
 
   it("is open to viewers, who are told to ask an admin for a key", async () => {
