@@ -1,10 +1,20 @@
 """HTTP client for one vLLM container's sleep-mode endpoints."""
 
+import asyncio
+import re
+import time
+
 import httpx
 
 from llm_manager.core.models_config import ModelSpec
 
 _PROBE_TIMEOUT_S = 5.0
+_IDLE_POLL_S = 0.25
+_IDLE_GRACE_S = 0.3  # after the engine reports idle, let the last GPU step finish
+_IDLE_LIMIT_S = 20.0
+_RUNNING_GAUGE = re.compile(
+    r"^vllm:num_requests_(?:running|waiting)(?:\{[^}]*\})?\s+([0-9.eE+-]+)\s*$", re.MULTILINE
+)
 
 
 class BackendError(Exception):
@@ -60,8 +70,36 @@ class VllmBackend:
             raise BackendError(str(exc) or type(exc).__name__) from exc
         return response
 
+    async def _engine_load(self, spec: ModelSpec) -> float | None:
+        """Requests vLLM is still running or has queued, or None if it does not say."""
+        try:
+            response = await self._call("GET", spec, "/metrics", timeout_s=_PROBE_TIMEOUT_S)
+        except BackendError:
+            return None
+        gauges = _RUNNING_GAUGE.findall(response.text)
+        return sum(float(g) for g in gauges) if gauges else None
+
+    async def _wait_until_engine_idle(self, spec: ModelSpec) -> None:
+        """Do not free GPU memory under a running step.
+
+        When a request is cancelled (client left, or stopped for a more important model) vLLM
+        keeps working on it until its next scheduling step. Sleeping in that moment unmaps
+        memory the kernel is using and kills the engine ("illegal memory access"), so wait
+        until vLLM itself reports nothing running.
+        """
+        deadline = time.monotonic() + _IDLE_LIMIT_S
+        waited = False
+        while (load := await self._engine_load(spec)) is not None and load > 0:
+            if time.monotonic() >= deadline:
+                raise BackendError(f"engine still busy after {_IDLE_LIMIT_S:.0f}s, not sleeping it")
+            waited = True
+            await asyncio.sleep(_IDLE_POLL_S)
+        if waited:
+            await asyncio.sleep(_IDLE_GRACE_S)
+
     async def sleep(self, spec: ModelSpec) -> None:
         """Move the model's weights to CPU RAM and free its GPU memory."""
+        await self._wait_until_engine_idle(spec)
         await self._call(
             "POST",
             spec,

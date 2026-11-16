@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from llm_manager.core.models_config import EngineConfig
-from tests.conftest import PORTS, StackFactory
+from tests.conftest import PORTS, StackFactory, until_busy
 from tests.fakes import FakeVLLM
 
 LONG = 5.0  # a request that would otherwise hold the GPU for far longer than any test waits
@@ -25,7 +25,7 @@ async def test_a_waiting_priority_request_stops_the_running_one_after_the_set_ti
     stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.4, min_awake_s=30)
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
-    await asyncio.sleep(0.2)  # b is busy with a long request
+    await until_busy(stack, "b")
     started = time.monotonic()
     served = await stack.chat(token, "a")
     waited = time.monotonic() - started
@@ -46,7 +46,7 @@ async def test_nothing_is_stopped_unless_the_setting_is_on(make_stack: StackFact
     stack = await make_stack(priorities={"a": 5}, queue_timeout_s=1.0, min_awake_s=30)
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=2.0))
-    await asyncio.sleep(0.2)
+    await until_busy(stack, "b")
     timed_out = await stack.chat(token, "a")
 
     assert timed_out.status_code == 503
@@ -59,7 +59,7 @@ async def test_a_request_of_equal_priority_is_never_stopped(make_stack: StackFac
     stack = await make_stack(preempt_after_s=0.3)
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=1.2))
-    await asyncio.sleep(0.2)
+    await until_busy(stack, "b")
     waiting = await stack.chat(token, "a")
 
     assert (await running).status_code == 200
@@ -72,7 +72,7 @@ async def test_a_busy_higher_priority_model_is_never_stopped(make_stack: StackFa
     stack = await make_stack(priorities={"b": 5}, preempt_after_s=0.3)
     token = await stack.api_key()
     running = asyncio.create_task(stack.chat(token, "b", work_s=1.2))
-    await asyncio.sleep(0.2)
+    await until_busy(stack, "b")
     waiting = await stack.chat(token, "a")
 
     assert (await running).status_code == 200
@@ -144,3 +144,48 @@ def test_the_setting_must_be_smaller_than_the_queue_timeout() -> None:
         EngineConfig(queue_timeout_s=60, preempt_after_s=60)
     assert EngineConfig(queue_timeout_s=60, preempt_after_s=30).preempt_after_s == 30
     assert EngineConfig().preempt_after_s is None
+
+
+async def test_the_victim_is_only_slept_once_its_engine_has_really_stopped(
+    make_stack: StackFactory,
+) -> None:
+    """vLLM keeps working on an aborted request for a moment; sleeping then kills the engine."""
+    stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
+    token = await stack.api_key()
+    running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
+    await until_busy(stack, "b")
+    stack.fakes["b"].ghost_until = time.monotonic() + 1.2  # still in its GPU step after the stop
+    started = time.monotonic()
+    served = await stack.chat(token, "a")
+    assert served.status_code == 200
+    assert time.monotonic() - started >= 1.0  # a waited for b's engine, not just for the cancel
+    assert (await running).status_code == 503
+    assert stack.ledger.violations == []
+
+
+async def test_a_model_whose_engine_never_goes_idle_is_not_slept(
+    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("llm_manager.engine.backend._IDLE_LIMIT_S", 0.6)
+    stack = await make_stack(
+        priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30, queue_timeout_s=2
+    )
+    token = await stack.api_key()
+    running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
+    await until_busy(stack, "b")
+    stack.fakes["b"].ghost_until = time.monotonic() + 60
+    assert (await stack.chat(token, "a")).status_code == 503  # could not free the GPU: retry later
+    await running
+    assert "sleep_failed" in kinds(stack)
+    assert stack.ledger.violations == []  # b was never put to sleep under a running engine
+
+
+async def test_without_metrics_the_model_is_slept_at_once(make_stack: StackFactory) -> None:
+    stack = await make_stack(priorities={"a": 5}, preempt_after_s=0.3, min_awake_s=30)
+    stack.fakes["b"].metrics_enabled = False  # an older or locked-down vLLM: old behaviour
+    token = await stack.api_key()
+    running = asyncio.create_task(stack.chat(token, "b", work_s=LONG))
+    await until_busy(stack, "b")
+    assert (await stack.chat(token, "a")).status_code == 200
+    await running
+    assert stack.ledger.violations == []

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -48,6 +49,10 @@ class FakeVLLM:
         self.active = 0
         self.served = 0
         self.fail_wake = False
+        self.ghost_until = (
+            0.0  # like vLLM: an aborted request still occupies the engine for a moment
+        )
+        self.metrics_enabled = True
         self.api_key: str | None = (
             None  # like `vllm serve --api-key`: protects everything but /health
         )
@@ -71,6 +76,10 @@ class FakeVLLM:
         async def sleep(level: int = 1) -> JSONResponse:
             if self.active:
                 self.ledger.violations.append(f"{self.name} slept with {self.active} in flight")
+            if time.monotonic() < self.ghost_until:
+                self.ledger.violations.append(
+                    f"{self.name} slept while its engine was still running"
+                )
             await asyncio.sleep(self.sleep_s)
             self.sleeping = True
             self.ledger.sleep(self.name)
@@ -93,6 +102,19 @@ class FakeVLLM:
         @app.get("/v1/models")
         async def models() -> dict[str, Any]:
             return {"data": [{"id": f"org/{self.name}"}]}
+
+        @app.get("/metrics")
+        async def metrics() -> Response:
+            if not self.metrics_enabled:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            running = self.active + (1 if time.monotonic() < self.ghost_until else 0)
+            labels = f'{{engine="0",model_name="org/{self.name}"}}'
+            text = (
+                "# HELP vllm:num_requests_running Number of requests in model execution batches.\n"
+                f"vllm:num_requests_running{labels} {running}.0\n"
+                f"vllm:num_requests_waiting{labels} 0.0\n"
+            )
+            return Response(text, media_type="text/plain")
 
         @app.get("/is_sleeping")
         async def is_sleeping() -> dict[str, bool]:

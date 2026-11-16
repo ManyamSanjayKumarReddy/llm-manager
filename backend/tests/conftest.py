@@ -258,3 +258,12 @@ async def eventually(check: Callable[[], Awaitable[bool]], timeout_s: float = 3.
             return
         await asyncio.sleep(0.05)
     raise AssertionError("condition not met in time")
+
+
+async def until_busy(stack: Stack, name: str) -> None:
+    """Wait until a request to ``name`` is really being served (a fixed sleep is not reliable)."""
+
+    async def busy() -> bool:
+        return stack.container.manager.models[name].inflight > 0
+
+    await eventually(busy, timeout_s=10.0)
