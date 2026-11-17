@@ -1,0 +1,21 @@
+[Unit]
+Description=Wakeful agent (controls vLLM containers for Wakeful)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+# Docker access is root-equivalent, so the agent runs as root and listens on localhost only.
+# Everything it may do is limited in code (see README): labelled containers, allowlisted images,
+# one cache folder, ports on 127.0.0.1.
+User=root
+WorkingDirectory=/opt/wakeful-agent/agent
+EnvironmentFile=/etc/wakeful-agent.env
+ExecStart=/opt/wakeful-agent/agent/.venv/bin/uvicorn wakeful_agent.main:app_from_env --factory --host 127.0.0.1 --port 8050 --proxy-headers
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/wakeful-agent/agent.log
+StandardError=append:/var/log/wakeful-agent/agent-error.log
+
+[Install]
+WantedBy=multi-user.target

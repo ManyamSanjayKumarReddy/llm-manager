@@ -1,0 +1,96 @@
+[
+  {
+    "name": "one GPU, defaults",
+    "params": {
+      "containerName": "qwen2.5-7b",
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "port": 8026,
+      "gpus": [0],
+      "imageTag": "v0.10.1",
+      "cacheDir": "/data/hf",
+      "apiKey": "",
+      "hfToken": "",
+      "maxModelLen": 8192,
+      "maxNumSeqs": 16,
+      "memoryShare": 0.9,
+      "allowLongContext": false,
+      "toolCalling": false,
+      "toolParser": "openai",
+      "autoRestart": true,
+      "extraArgs": ""
+    },
+    "spec": {
+      "name": "qwen2.5-7b",
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "image": "vllm/vllm-openai:v0.10.1",
+      "port": 8026,
+      "gpus": [0],
+      "cache_dir": "/data/hf",
+      "max_model_len": 8192,
+      "max_num_seqs": 16,
+      "memory_share": 0.9,
+      "auto_restart": true
+    },
+    "argv": [
+      "run", "-d", "--gpus", "\"device=0\"", "--name", "qwen2.5-7b",
+      "--restart", "unless-stopped",
+      "-v", "/data/hf:/root/.cache/huggingface",
+      "-e", "VLLM_SERVER_DEV_MODE=1",
+      "-p", "127.0.0.1:8026:8000", "--ipc=host", "vllm/vllm-openai:v0.10.1",
+      "--model", "Qwen/Qwen2.5-7B-Instruct",
+      "--enable-sleep-mode", "--max-model-len", "8192", "--max-num-seqs", "16",
+      "--gpu-memory-utilization", "0.9", "--tokenizer-mode", "auto",
+      "--host", "0.0.0.0", "--port", "8000"
+    ]
+  },
+  {
+    "name": "two GPUs, long context, tool calling, extra args, no restart",
+    "params": {
+      "containerName": "gpt-oss-20b",
+      "model": "openai/gpt-oss-20b",
+      "port": 8025,
+      "gpus": [1, 0],
+      "imageTag": "v0.10.1",
+      "cacheDir": "/data/hf",
+      "apiKey": "",
+      "hfToken": "",
+      "maxModelLen": 65536,
+      "maxNumSeqs": 8,
+      "memoryShare": 0.85,
+      "allowLongContext": true,
+      "toolCalling": true,
+      "toolParser": "openai",
+      "autoRestart": false,
+      "extraArgs": "--served-model-name gpt-oss-20b --dtype auto"
+    },
+    "spec": {
+      "name": "gpt-oss-20b",
+      "model": "openai/gpt-oss-20b",
+      "image": "vllm/vllm-openai:v0.10.1",
+      "port": 8025,
+      "gpus": [1, 0],
+      "cache_dir": "/data/hf",
+      "max_model_len": 65536,
+      "max_num_seqs": 8,
+      "memory_share": 0.85,
+      "allow_long_context": true,
+      "tool_calling": true,
+      "tool_parser": "openai",
+      "auto_restart": false,
+      "extra_args": "--served-model-name gpt-oss-20b --dtype auto"
+    },
+    "argv": [
+      "run", "-d", "--gpus", "\"device=0,1\"", "--name", "gpt-oss-20b",
+      "-v", "/data/hf:/root/.cache/huggingface",
+      "-e", "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1",
+      "-e", "VLLM_SERVER_DEV_MODE=1",
+      "-p", "127.0.0.1:8025:8000", "--ipc=host", "vllm/vllm-openai:v0.10.1",
+      "--model", "openai/gpt-oss-20b", "--tensor-parallel-size", "2",
+      "--enable-sleep-mode", "--max-model-len", "65536", "--max-num-seqs", "8",
+      "--gpu-memory-utilization", "0.85", "--tokenizer-mode", "auto",
+      "--enable-auto-tool-choice", "--tool-call-parser", "openai",
+      "--served-model-name", "gpt-oss-20b", "--dtype", "auto",
+      "--host", "0.0.0.0", "--port", "8000"
+    ]
+  }
+]

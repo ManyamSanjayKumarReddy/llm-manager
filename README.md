@@ -14,6 +14,7 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 |---|---|
 | `backend/` | FastAPI, Tortoise ORM, Pydantic, Aerich, uv |
 | `web/` | Dashboard and landing page: React + TypeScript + Vite (built to `web/dist`, served by the backend) |
+| `agent/` | Optional small service for a GPU server: lets the dashboard start, stop, create and remove its vLLM containers and show its GPU, RAM and disk (see `agent/README.md`) |
 | `scripts/` | `make-cert.sh` (self-signed certificate), `bootstrap.sh` (start model containers one at a time), `vllm-abort-sleep/` (build a vLLM 0.10.1 image whose `/sleep` aborts running requests, see Scheduling) |
 
 ## Scheduling
@@ -37,7 +38,7 @@ browser ──(sign-in)───┘        └─ PostgreSQL (Docker)
 - Failure to wake or a wait over the queue timeout gives `503` + `Retry-After`; unknown model `404`, not allowed `403`,
   bad key `401`, over the rate limit `429`.
 
-Wakeful does not create models or touch Docker. You start vLLM containers; the dashboard builds the command and registers them.
+Wakeful itself never touches Docker. You start vLLM containers (the dashboard builds the command and registers them), or install the optional agent on a GPU server and let the dashboard create, start, stop and remove containers there: see `agent/README.md`.
 
 ## Run
 

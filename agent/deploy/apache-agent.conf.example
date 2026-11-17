@@ -1,0 +1,13 @@
+# Inside the existing TLS <VirtualHost> of the GPU server (the one that already fronts the vLLM
+# containers). Wakeful then reaches the agent at https://<your-host>/agent
+#
+# Needs: a2enmod proxy proxy_http
+<Location "/agent/">
+    ProxyPass        "http://127.0.0.1:8050/"
+    ProxyPassReverse "http://127.0.0.1:8050/"
+    # Stopping or removing a vLLM container can take up to ~35 s.
+    ProxyTimeout 120
+
+    # Optional but recommended: only Wakeful's server may call the agent.
+    # Require ip 203.0.113.10
+</Location>
