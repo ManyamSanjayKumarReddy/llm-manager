@@ -13,7 +13,7 @@ from llm_manager.schemas.models import ModelCheck, ModelCheckRequest, ModelCreat
 from llm_manager.services.audit import AuditService
 
 _PROBE_TIMEOUT_S = 5.0
-_CLEARABLE = {"served_name", "backend_api_key"}
+_CLEARABLE = {"served_name", "backend_api_key", "container"}
 
 
 def _to_spec(row: ManagedModel) -> ModelSpec:
@@ -58,6 +58,20 @@ async def _server_for(name: str, gpus: frozenset[int]) -> Server:
     return server
 
 
+async def _check_container_free(
+    server: Server, container: str | None, *, ignore: str | None
+) -> None:
+    """One container backs at most one model."""
+    if container is None:
+        return
+    query = ManagedModel.filter(server=server, container_name=container)
+    if ignore is not None:
+        query = query.exclude(name=ignore)
+    taken = await query.first()
+    if taken is not None:
+        raise InvalidInputError(f"container '{container}' already runs the model '{taken.name}'")
+
+
 class ModelService:
     """Registers, edits and removes models, keeping the database and the scheduler in step."""
 
@@ -77,6 +91,17 @@ class ModelService:
         total = await query.count()
         return await query.order_by("name").offset(offset).limit(limit), total
 
+    async def ensure_name_free(self, name: str, served_name: str | None) -> None:
+        """Refuse a name (or served name) another model already uses, before anything is built."""
+        wanted = {name, served_name} - {None}
+        for other in self._manager.models.values():
+            if wanted & {other.name, other.served_name}:
+                raise InvalidInputError(
+                    f"the name '{name}' or its served name is already used by '{other.name}'"
+                )
+        if await ManagedModel.filter(name=name).exists():
+            raise InvalidInputError(f"a model called '{name}' already exists")
+
     async def create(self, body: ModelCreate, *, actor: str, ip: str | None) -> ManagedModel:
         """Register an existing container. If it is awake it is put to sleep."""
         server = await _server_for(body.server, body.gpus)
@@ -89,6 +114,7 @@ class ModelService:
             priority=body.priority,
             backend_api_key=body.backend_api_key,
         )
+        await _check_container_free(server, body.container, ignore=None)
         await self._manager.register(body.name, spec)  # validates names and probes the container
         try:
             row = await ManagedModel.create(
@@ -100,6 +126,7 @@ class ModelService:
                 idle_minutes=spec.idle_minutes,
                 priority=spec.priority,
                 backend_api_key=spec.backend_key,
+                container_name=body.container,
             )
         except IntegrityError:
             await self._manager.remove(body.name)
@@ -120,6 +147,9 @@ class ModelService:
         if unknown:
             raise InvalidInputError(f"cannot clear: {', '.join(sorted(unknown))}")
         changes = body.model_dump(exclude_unset=True, exclude={"clear"}, exclude_none=True)
+        container = changes.pop("container", row.container_name)
+        if "container" in body.clear:
+            container = None
         merged = {
             "server": row.server.name,
             "url": row.url,
@@ -129,10 +159,13 @@ class ModelService:
             "priority": row.priority,
             "backend_api_key": SecretStr(row.backend_api_key) if row.backend_api_key else None,
             **changes,
-            **dict.fromkeys(body.clear),
+            **dict.fromkeys(set(body.clear) - {"container"}),
         }
         spec = ModelSpec.model_validate(merged)
         server = await _server_for(spec.server, spec.gpus)
+        if spec.server != row.server.name and "container" not in body.model_fields_set:
+            container = None  # the link was to a container on the old server
+        await _check_container_free(server, container, ignore=name)
         await self._manager.update(name, spec)
         row.server = server
         row.url = spec.url
@@ -141,6 +174,7 @@ class ModelService:
         row.idle_minutes = spec.idle_minutes
         row.priority = spec.priority
         row.backend_api_key = spec.backend_key
+        row.container_name = container
         await row.save()
         await self._audit.record(
             actor, "model.update", target=name, ip=ip, detail=", ".join(sorted(changes)) or None

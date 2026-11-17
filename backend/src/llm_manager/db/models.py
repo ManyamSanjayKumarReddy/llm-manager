@@ -161,6 +161,10 @@ class Server(Model):
     name = fields.CharField(max_length=64, unique=True)
     gpu_count = fields.IntField()
     gpu_type = fields.CharField(max_length=100, null=True)  # free text, e.g. "2x RTX 4060 Ti 16 GB"
+    # The Wakeful agent on this machine (optional): lets admins control its containers.
+    agent_url = fields.CharField(max_length=300, null=True)
+    # The agent's bearer token. Sent as-is, so it cannot be hashed; the API never returns it.
+    agent_token: str | None = fields.TextField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
@@ -185,6 +189,9 @@ class ManagedModel(Model):
     # The container's own API key. The router must send it as-is, so it cannot be hashed; the
     # API never returns it (see ModelOut.has_api_key).
     backend_api_key: str | None = fields.TextField(null=True)
+    # The container (on the server's agent) that backs this model, so the dashboard can start,
+    # stop and remove it together with the model. Optional: models can be registered by hand.
+    container_name = fields.CharField(max_length=64, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
@@ -192,6 +199,7 @@ class ManagedModel(Model):
         """Table options."""
 
         table = "managed_models"
+        unique_together = (("server", "container_name"),)
 
 
 class SchedulerSettings(Model):

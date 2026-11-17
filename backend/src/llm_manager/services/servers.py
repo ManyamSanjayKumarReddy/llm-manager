@@ -32,6 +32,8 @@ class ServerService:
                 name=r.name,
                 gpu_count=r.gpu_count,
                 gpu_type=r.gpu_type,
+                agent_url=r.agent_url,
+                has_agent=bool(r.agent_url and r.agent_token),
                 models=placed.get(r.name, []),
                 created_at=r.created_at,
             )
@@ -44,9 +46,15 @@ class ServerService:
 
     async def create(self, body: ServerCreate, *, actor: str, ip: str | None) -> ServerOut:
         """Register a server."""
+        if bool(body.agent_url) != bool(body.agent_token):
+            raise InvalidInputError("an agent needs both an address and a token")
         try:
             row = await Server.create(
-                name=body.name, gpu_count=body.gpu_count, gpu_type=body.gpu_type or None
+                name=body.name,
+                gpu_count=body.gpu_count,
+                gpu_type=body.gpu_type or None,
+                agent_url=body.agent_url or None,
+                agent_token=body.agent_token or None,
             )
         except IntegrityError:
             raise InvalidInputError("a server with that name already exists") from None
@@ -75,6 +83,17 @@ class ServerService:
         if body.gpu_type is not None:
             row.gpu_type = body.gpu_type.strip() or None
             changed.append("gpu type")
+        if body.agent_url is not None:
+            if body.agent_url == "":
+                row.agent_url = row.agent_token = None  # removing the agent forgets its token
+            else:
+                row.agent_url = body.agent_url
+            changed.append("agent address")
+        if body.agent_token is not None:
+            row.agent_token = body.agent_token
+            changed.append("agent token")
+        if bool(row.agent_url) != bool(row.agent_token):
+            raise InvalidInputError("an agent needs both an address and a token")
         await row.save()
         await self._audit.record(
             actor, "server.update", target=name, ip=ip, detail=", ".join(changed) or None

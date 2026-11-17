@@ -27,6 +27,9 @@ class ModelCreate(RequestSchema):
     idle_minutes: IdleMinutes = 10.0
     priority: Priority = 0
     backend_api_key: ApiKeyText | None = None
+    container: str | None = Field(
+        None, max_length=64, description="the container on that server's agent that runs it"
+    )
 
 
 class ModelUpdate(RequestSchema):
@@ -39,8 +42,9 @@ class ModelUpdate(RequestSchema):
     idle_minutes: IdleMinutes | None = None
     priority: Priority | None = None
     backend_api_key: ApiKeyText | None = None
+    container: str | None = Field(None, max_length=64)
     # Distinguish "leave as is" from "clear it": list the fields to clear.
-    clear: list[str] = Field(default_factory=list, max_length=3)
+    clear: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ModelOut(ResponseSchema):
@@ -54,6 +58,7 @@ class ModelOut(ResponseSchema):
     idle_minutes: float
     priority: int
     has_api_key: bool = Field(description="a key is stored (the key itself is never returned)")
+    container: str | None = Field(description="the container that runs it, if linked")
     created_at: datetime
     state: str
     inflight: int

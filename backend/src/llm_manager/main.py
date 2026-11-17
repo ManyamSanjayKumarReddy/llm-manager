@@ -16,6 +16,7 @@ from llm_manager.api.middleware import OriginCheckMiddleware, SecurityHeadersMid
 from llm_manager.api.routers import (
     api_keys,
     auth,
+    containers,
     health,
     models,
     proxy,
@@ -134,6 +135,7 @@ def create_app(
         users,
         api_keys,
         servers,
+        containers,
         models,
         scheduling,
         status,

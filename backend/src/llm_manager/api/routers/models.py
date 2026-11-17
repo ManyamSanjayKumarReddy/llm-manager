@@ -31,6 +31,7 @@ def _out(row: ManagedModel, manager: Manager) -> ModelOut:
         idle_minutes=row.idle_minutes,
         priority=row.priority,
         has_api_key=bool(row.backend_api_key),
+        container=row.container_name,
         created_at=row.created_at,
         state=runtime.state.value if runtime else "unknown",
         inflight=runtime.inflight if runtime else 0,

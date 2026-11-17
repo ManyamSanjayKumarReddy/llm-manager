@@ -8,6 +8,7 @@ from llm_manager.core.settings import Settings
 from llm_manager.engine import Manager
 from llm_manager.services.api_keys import ApiKeyService
 from llm_manager.services.audit import AuditService
+from llm_manager.services.containers import ContainerService
 from llm_manager.services.login import LoginService
 from llm_manager.services.models import ModelService
 from llm_manager.services.recorder import Recorder
@@ -32,6 +33,7 @@ class Container:
     users: UserService
     servers: ServerService
     models: ModelService
+    containers: ContainerService
     api_keys: ApiKeyService
     stats: StatsService
     usage: UsageService
@@ -42,6 +44,7 @@ class Container:
 def build_container(settings: Settings, manager: Manager, http: httpx.AsyncClient) -> Container:
     """Wire the services together."""
     audit = AuditService()
+    models = ModelService(manager, audit, http)
     sessions = SessionService(settings)
     return Container(
         settings=settings,
@@ -52,7 +55,8 @@ def build_container(settings: Settings, manager: Manager, http: httpx.AsyncClien
         login=LoginService(settings, sessions, audit),
         users=UserService(settings, audit, sessions),
         servers=ServerService(audit),
-        models=ModelService(manager, audit, http),
+        models=models,
+        containers=ContainerService(manager, models, audit, http),
         api_keys=ApiKeyService(audit),
         stats=StatsService(),
         usage=UsageService(),

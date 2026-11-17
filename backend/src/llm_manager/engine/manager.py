@@ -523,6 +523,47 @@ class Manager:
             model.state = State.SLEEPING
         await self._go_to_sleep(model, "manual")
 
+    def require_quiet(self, name: str, action: str) -> None:
+        """Refuse ``action`` on a model's container while the model is busy or changing state."""
+        model = self._get(name)
+        if (
+            model.state in (State.WAKING, State.SLEEPING)
+            or model.inflight
+            or model.waiting
+            or model.stop_requested
+        ):
+            raise InvalidInputError(
+                f"{name} is {model.state.value} with {model.inflight} running and "
+                f"{model.waiting} waiting request(s): wait until it is idle to {action}"
+            )
+
+    async def refresh(self, name: str) -> None:
+        """Look at a model's container right now, after it was started, stopped or restarted.
+
+        Without this the scheduler would find out on its own within a few seconds; this just
+        makes the dashboard and the next request see the truth at once.
+        """
+        model = self._get(name)
+        found = await self._probe(model)
+        sleep_it = False
+        async with self._cond:
+            if model.state in (State.WAKING, State.SLEEPING) or model.inflight or model.waiting:
+                return  # in motion: its own transition will settle it
+            if found is State.DOWN and model.state is not State.DOWN:
+                model.state = State.DOWN
+                self._event(model, "went_down", "container stopped or unreachable")
+            elif found is not State.DOWN and model.state is State.DOWN:
+                model.state = State.SLEEPING if found is State.AWAKE else State.ASLEEP
+                sleep_it = found is State.AWAKE
+                self._event(model, "back_online", found.value)
+            elif found is State.AWAKE and model.state is State.ASLEEP:
+                model.state = State.SLEEPING  # restarted fresh, so awake again
+                sleep_it = True
+                self._event(model, "back_online", "awake")
+            self._cond.notify_all()
+        if sleep_it:
+            await self._go_to_sleep(model, "adopted")
+
     async def reconfigure(self, config: EngineConfig) -> None:
         """Apply new timings at once; requests that are already waiting use them too."""
         async with self._cond:
