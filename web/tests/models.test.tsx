@@ -172,7 +172,7 @@ describe("vLLM command", () => {
 
 describe("form problems", () => {
   const form = (change: Partial<Form>): Form => ({ ...DEFAULTS, model: "openai/gpt-oss-20b", server: "this-server", ...change });
-  const registered = [{ name: "taken", server: "this-server", url: "http://127.0.0.1:9000", served_name: null, gpus: [0], idle_minutes: 10, priority: 0, has_api_key: false, created_at: "", state: "asleep", inflight: 0, waiting: 0 }];
+  const registered = [{ name: "taken", server: "this-server", url: "http://127.0.0.1:9000", served_name: null, gpus: [0], idle_minutes: 10, priority: 0, has_api_key: false, container: null, created_at: "", state: "asleep", inflight: 0, waiting: 0 }];
 
   it("files each problem under the step where it can be fixed", () => {
     expect(problemsOf(form({}), []).flat()).toEqual([]);
@@ -194,9 +194,9 @@ describe("Models screen", () => {
   const admin = { username: "root", role: "admin", csrf_token: "csrf-1" };
   const row = (name: string, extra: Record<string, unknown> = {}) => ({
     name, server: "this-server", url: "http://127.0.0.1:8025", served_name: `org/${name}`, gpus: [0], idle_minutes: 10, priority: 0,
-    has_api_key: false, created_at: "2026-01-01T00:00:00Z", state: "asleep", inflight: 0, waiting: 0, ...extra,
+    has_api_key: false, container: null, created_at: "2026-01-01T00:00:00Z", state: "asleep", inflight: 0, waiting: 0, ...extra,
   });
-  const servers = [{ name: "this-server", gpu_count: 2, gpu_type: null, models: [], created_at: "2026-01-01T00:00:00Z" }];
+  const servers = [{ name: "this-server", gpu_count: 2, gpu_type: null, agent_url: null, has_agent: false, models: [], created_at: "2026-01-01T00:00:00Z" }];
   const ok = { reachable: true, sleep_endpoints: true, state: "awake", served_models: ["openai/new-one"], served_name_found: true, key_accepted: null, problems: [] };
   const next = async (user: ReturnType<typeof userEvent.setup>, times = 1) => {
     for (let i = 0; i < times; i++) await user.click(screen.getByRole("button", { name: /^Next/ }));

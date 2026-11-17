@@ -6,6 +6,7 @@ import { FormSection, PresetNumber } from "../../components/Controls";
 import { Icon } from "../../components/Icon";
 import { ModalHeader } from "../../components/Modal";
 import { Field, Pill } from "../../components/ui";
+import { useAsync } from "../../hooks/useAsync";
 import { serverLabel } from "../servers/label";
 import { useToast } from "../toast/context";
 import { IDLES, PRIORITIES } from "./form";
@@ -29,11 +30,19 @@ export function ManageModelDialog({ model, servers, onClose, onChanged }: Props)
   const [server, setServer] = useState(model.server);
   const [gpus, setGpus] = useState(model.gpus);
   const gpuCount = servers.find((s) => s.name === server)?.gpu_count ?? 0;
+  const [container, setContainer] = useState(model.container ?? "");
   const [newKey, setNewKey] = useState("");
   const [removeKey, setRemoveKey] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   const idleNow = model.state === "asleep" || model.state === "down";
+  // The containers its server's agent manages, so the model can be linked to one of them.
+  const agentHere = servers.find((s) => s.name === model.server)?.has_agent === true;
+  const containers = useAsync(
+    () => (agentHere ? api.containers(model.server, { page: 1, pageSize: 100 }) : Promise.resolve(undefined)),
+    undefined,
+    model.server,
+  );
 
   async function run(action: () => Promise<unknown>, success: string, close: boolean) {
     setBusy(true);
@@ -62,6 +71,10 @@ export function ManageModelDialog({ model, servers, onClose, onChanged }: Props)
     }
     if (newKey) changes.backend_api_key = newKey;
     else if (removeKey) clear.push("backend_api_key");
+    if (container !== (model.container ?? "")) {
+      if (container) changes.container = container;
+      else clear.push("container");
+    }
     if (clear.length > 0) changes.clear = clear;
     if (Object.keys(changes).length === 0) { onClose(); return; }
     void run(() => api.updateModel(model.name, changes), `${model.name} updated.`, true);
@@ -94,6 +107,19 @@ export function ManageModelDialog({ model, servers, onClose, onChanged }: Props)
             <label className="check-line"><input type="checkbox" checked={removeKey} disabled={newKey !== ""} onChange={(e) => { setRemoveKey(e.target.checked); }} /> Remove the stored key</label>
           ) : null}
         </FormSection>
+
+        {agentHere ? (
+          <FormSection title="Container" hint="The container that runs this model. Stopping, restarting or removing it from the Servers page then goes through this model, and removing it also removes the model.">
+            <Field label="Linked container">
+              <select className="input" value={container} onChange={(e) => { setContainer(e.target.value); }}>
+                <option value="">None</option>
+                {container !== "" && !(containers.data?.items ?? []).some((c) => c.name === container) ? <option value={container}>{container}</option> : null}
+                {(containers.data?.items ?? []).map((c) => <option key={c.name} value={c.name}>{c.name}{c.registered_as && c.registered_as !== model.name ? ` (used by ${c.registered_as})` : ""}</option>)}
+              </select>
+            </Field>
+            {containers.error ? <p className="hint dim">Could not list the containers: {containers.error}</p> : null}
+          </FormSection>
+        ) : null}
 
         <FormSection title="Where it runs" hint={idleNow ? "Changing these is safe while the model is asleep." : `Locked while the model is ${model.state}. Put it to sleep to change them.`}>
           <fieldset className="locked" disabled={!idleNow}>

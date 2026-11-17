@@ -41,6 +41,8 @@ export interface CommandLine {
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const HF_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
 const TAG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+// A full image reference such as vllm-openai:v0.10.1-abortsleep (a locally built image).
+const IMAGE_REF = /^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const PATH = /^[~/][A-Za-z0-9_./~-]*$/;
 const PARSER = /^[a-z0-9_]{1,40}$/;
 const EXTRA = /^[A-Za-z0-9_.:/=, @+-]{0,300}$/;
@@ -54,7 +56,7 @@ export function vllmProblems(p: VllmParams): string[] {
   if (!NAME.test(p.containerName)) problems.push("Name: letters, digits, dot, dash or underscore.");
   if (!Number.isInteger(p.port) || p.port < 1024 || p.port > 65535) problems.push("Port: a number from 1024 to 65535.");
   if (p.gpus.length === 0) problems.push("Choose at least one GPU.");
-  if (!TAG.test(p.imageTag)) problems.push("vLLM version: a tag such as v0.10.1.");
+  if (!TAG.test(p.imageTag) && !IMAGE_REF.test(p.imageTag)) problems.push("vLLM version: a tag such as v0.10.1, or a full image such as vllm-openai:v0.10.1-abortsleep.");
   if (!PATH.test(p.cacheDir)) problems.push("Model cache folder: a path such as ~/.cache/huggingface (no spaces).");
   if (p.apiKey !== "" && !isSecretText(p.apiKey)) problems.push("API key: one line, no spaces, up to 512 characters.");
   if (p.hfToken !== "" && !isSecretText(p.hfToken)) problems.push("Hugging Face token: one line, no spaces.");
@@ -64,6 +66,11 @@ export function vllmProblems(p: VllmParams): string[] {
   if (p.toolCalling && !PARSER.test(p.toolParser)) problems.push("Tool-call parser: lowercase letters, digits or underscore, such as openai.");
   if (!EXTRA.test(p.extraArgs)) problems.push("Extra arguments: letters, digits and . : / = , @ + - only. Quotes and shell characters are not allowed here.");
   return problems;
+}
+
+/** The image to run: a bare tag means the official vLLM image, anything with a colon is used as given. */
+export function imageRef(imageTag: string): string {
+  return imageTag.includes(":") ? imageTag : `vllm/vllm-openai:${imageTag}`;
 }
 
 function isSecretText(value: string): boolean {
@@ -101,7 +108,7 @@ export function buildVllmLines(p: VllmParams, reveal = false): CommandLine[] | n
     { text: `--env ${reveal || !p.hfToken ? envArg("HUGGING_FACE_HUB_TOKEN", p.hfToken) : `"HUGGING_FACE_HUB_TOKEN=${maskSecret(p.hfToken)}"`}`, secret: p.hfToken !== "", note: p.hfToken ? undefined : "paste your token here if the model is gated" },
     { text: `-p 127.0.0.1:${p.port}:8000`, note: "reachable from this machine only" },
     { text: "--ipc=host" },
-    { text: `vllm/vllm-openai:${p.imageTag}` },
+    { text: imageRef(p.imageTag) },
     { text: `--model ${p.model}` },
     ...(gpus.length > 1 ? [{ text: `--tensor-parallel-size ${gpus.length}`, router: true, note: `one model split over ${gpus.length} GPUs` }] : []),
     { text: "--enable-sleep-mode", router: true, note: "lets the model give its GPU memory back" },

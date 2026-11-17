@@ -116,6 +116,10 @@ export interface Server {
   gpu_count: number;
   /** What kind of GPUs, free text; null if not given. */
   gpu_type: string | null;
+  /** Where its Wakeful agent listens, if it has one. */
+  agent_url: string | null;
+  /** An agent address and token are stored (the token itself is never sent back). */
+  has_agent: boolean;
   /** Names of the models placed on it. */
   models: string[];
   created_at: string;
@@ -133,6 +137,8 @@ export interface ManagedModel {
   priority: number;
   /** Whether a key is stored. The key itself is never sent back. */
   has_api_key: boolean;
+  /** The container (on the server's agent) that runs it, if linked. */
+  container: string | null;
   created_at: string;
   state: string;
   inflight: number;
@@ -160,7 +166,9 @@ export interface ModelChanges {
   /** The container's own API key. Leave it out to keep the stored one. */
   backend_api_key?: string;
   /** Optional fields to empty out (leaving a field out of the request means "unchanged"). */
-  clear?: ("served_name" | "backend_api_key")[];
+  clear?: ("served_name" | "backend_api_key" | "container")[];
+  /** The container that runs it (on the server's agent). */
+  container?: string;
 }
 
 /** What a connection test found out about a container. */
@@ -236,4 +244,86 @@ export interface SchedulerSettings {
   defaults: SchedulerValues;
   updated_at: string | null;
   updated_by: string | null;
+}
+
+/** A container on a server, as its agent reports it. */
+export interface Container {
+  name: string;
+  /** running, exited, restarting, created, paused or dead. */
+  state: string;
+  running: boolean;
+  /** What Docker prints, e.g. "Up 3 hours". */
+  status: string;
+  image: string;
+  port: number | null;
+  gpus: number[];
+  /** The Hugging Face id it was started with. */
+  model: string | null;
+  restart_policy: string;
+  exit_code: number | null;
+  oom_killed: boolean;
+  created_at: string;
+  started_at: string | null;
+  /** The registered model that uses it, and that model's wake/sleep state. */
+  registered_as: string | null;
+  model_state: string | null;
+}
+
+/** What the agent needs to create a container (sleep mode is always on). */
+export interface NewContainer {
+  name: string;
+  model: string;
+  image: string;
+  port: number;
+  gpus: number[];
+  cache_dir: string;
+  api_key?: string | null;
+  hf_token?: string | null;
+  max_model_len: number;
+  max_num_seqs: number;
+  memory_share: number;
+  allow_long_context: boolean;
+  tool_calling: boolean;
+  tool_parser: string;
+  auto_restart: boolean;
+  extra_args: string;
+  /** Also register it as a model. */
+  register_as?: {
+    name: string;
+    url: string;
+    served_name: string | null;
+    idle_minutes: number;
+    priority: number;
+  };
+}
+
+export interface ContainerLogs {
+  name: string;
+  text: string;
+  truncated: boolean;
+}
+
+export interface HostGpu {
+  index: number;
+  name: string;
+  memory_used_mb: number;
+  memory_total_mb: number;
+  utilization_pct: number;
+  temperature_c: number | null;
+}
+
+/** How loaded a server is right now. */
+export interface HostStats {
+  gpus: HostGpu[];
+  /** Why GPU figures are missing, if they are. */
+  gpu_error: string | null;
+  ram_total_mb: number;
+  ram_available_mb: number;
+  swap_total_mb: number;
+  swap_used_mb: number;
+  disk_total_gb: number;
+  disk_free_gb: number;
+  disk_path: string;
+  cpu_count: number;
+  load_1m: number;
 }

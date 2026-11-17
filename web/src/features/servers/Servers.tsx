@@ -2,11 +2,15 @@ import { useState, type SubmitEvent } from "react";
 
 import { api } from "../../api/client";
 import type { Server } from "../../api/types";
+import { Modal } from "../../components/Modal";
 import { Reveal } from "../../components/Reveal";
 import { Field, PageHead } from "../../components/ui";
 import { useAsync } from "../../hooks/useAsync";
 import { Link } from "../../router/Link";
 import { useToast } from "../toast/context";
+import { AgentDialog } from "./AgentDialog";
+import { ContainersDialog } from "./ContainersDialog";
+import { hostSummary } from "./hostSummary";
 
 /** The machines with GPUs. Models are placed on one of them, so GPU numbers stay unambiguous. */
 export function Servers() {
@@ -27,6 +31,10 @@ export function Servers() {
   }
 
   const items = servers.data ?? [];
+  const [agentFor, setAgentFor] = useState<string>();
+  const [containersFor, setContainersFor] = useState<string>();
+  const agentServer = items.find((s) => s.name === agentFor);
+  const containerServer = items.find((s) => s.name === containersFor);
   return (
     <div className="page">
       <PageHead eyebrow="Fleet" title="Servers">
@@ -40,12 +48,14 @@ export function Servers() {
           {!servers.loading && items.length === 0 ? <p className="no-match">No servers yet. Add the first one above.</p> : null}
           <div className="table-wrap" hidden={items.length === 0}>
             <table className="cards">
-              <thead><tr><th>Server</th><th>GPU type</th><th>GPUs</th><th>Models</th><th /></tr></thead>
+              <thead><tr><th>Server</th><th>GPU type</th><th>GPUs</th><th>Models</th><th>Agent</th><th /></tr></thead>
               <tbody>
                 {items.map((server) => (
                   <ServerRow
                     key={`${server.name}-${server.gpu_count}-${server.gpu_type ?? ""}`}
                     server={server}
+                    onAgent={() => { setAgentFor(server.name); }}
+                    onContainers={() => { setContainersFor(server.name); }}
                     onChange={(changes) => act(() => api.updateServer(server.name, changes), `${server.name} updated.`)}
                     onRemove={() => act(() => api.removeServer(server.name), `${server.name} removed.`)}
                   />
@@ -53,14 +63,29 @@ export function Servers() {
               </tbody>
             </table>
           </div>
-          {items.length > 0 ? <p className="hint dim">Add models on the <Link to="/models">Models</Link> page.</p> : null}
+          {items.length > 0 ? <p className="hint dim">Add models on the <Link to="/models">Models</Link> page. An agent lets you start, stop and create containers on a server from here.</p> : null}
         </section>
       </Reveal>
+
+      <Modal open={agentServer !== undefined} onClose={() => { setAgentFor(undefined); }} label="Agent settings">
+        {agentServer ? <AgentDialog server={agentServer} onClose={() => { setAgentFor(undefined); }} onChanged={() => { setAgentFor(undefined); void servers.reload(); }} /> : null}
+      </Modal>
+      <Modal open={containerServer !== undefined} onClose={() => { setContainersFor(undefined); }} label="Containers" size="lg">
+        {containerServer ? <ContainersDialog server={containerServer} onClose={() => { setContainersFor(undefined); }} onChanged={() => { void servers.reload(); }} /> : null}
+      </Modal>
     </div>
   );
 }
 
-function ServerRow({ server, onChange, onRemove }: { server: Server; onChange: (changes: { gpu_count?: number; gpu_type?: string }) => Promise<boolean>; onRemove: () => Promise<boolean> }) {
+/** One line about the machine's load, refreshed now and then. Says so when the agent cannot be reached. */
+function AgentStatus({ server }: { server: string }) {
+  const host = useAsync(() => api.hostStats(server), 15000);
+  if (host.error) return <span className="dim small-text">Agent not reachable</span>;
+  if (!host.data) return <span className="dim small-text">Checking…</span>;
+  return <span className="dim small-text">{hostSummary(host.data)}</span>;
+}
+
+function ServerRow({ server, onChange, onRemove, onAgent, onContainers }: { server: Server; onChange: (changes: { gpu_count?: number; gpu_type?: string }) => Promise<boolean>; onRemove: () => Promise<boolean>; onAgent: () => void; onContainers: () => void }) {
   const [count, setCount] = useState(String(server.gpu_count));
   const [type, setType] = useState(server.gpu_type ?? "");
   const [confirming, setConfirming] = useState(false);
@@ -80,6 +105,19 @@ function ServerRow({ server, onChange, onRemove }: { server: Server; onChange: (
         <input className="input" type="number" min={1} max={16} inputMode="numeric" aria-label={`GPUs on ${server.name}`} style={{ width: "5rem" }} value={count} onChange={(e) => { setCount(e.target.value); }} />
       </td>
       <td data-label="Models" className="dim">{server.models.length > 0 ? server.models.join(", ") : "None yet"}</td>
+      <td data-label="Agent">
+        {server.has_agent ? (
+          <div className="agent-cell">
+            <AgentStatus server={server.name} />
+            <div className="actions-cell">
+              <button className="btn small" type="button" onClick={onContainers}>Containers</button>
+              <button className="btn small" type="button" onClick={onAgent}>Settings</button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn small" type="button" onClick={onAgent}>Set up agent</button>
+        )}
+      </td>
       <td data-label="">
         <div className="actions-cell">
           {countChanged || typeChanged ? <button className="btn small primary" type="button" disabled={!countOk} onClick={save}>Save</button> : null}

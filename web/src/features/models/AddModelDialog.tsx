@@ -11,6 +11,7 @@ import {
   buildVllmCommand,
   buildVllmLines,
   generateApiKey,
+  imageRef,
   servedNameFor,
 } from "../../lib/vllmCommand";
 import { Link } from "../../router/Link";
@@ -43,7 +44,7 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
   const [form, setForm] = useState<Form>({ ...DEFAULTS, server: servers[0]?.name ?? "" });
   const [revealed, setRevealed] = useState(false);
   const [check, setCheck] = useState<ModelCheck>();
-  const [busy, setBusy] = useState<"check" | "register">();
+  const [busy, setBusy] = useState<"check" | "register" | "create">();
 
   /** Move to another step. The command always starts with its keys hidden. */
   const goTo = (next: number) => {
@@ -80,6 +81,37 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
       toast.show("error", err instanceof Error ? err.message : "The check failed.");
     }
     setBusy(undefined);
+  }
+
+  /** Have the server's agent create the container, and register it as a model in one go. */
+  async function createAndRegister() {
+    setBusy("create");
+    try {
+      await api.createContainer(form.server, {
+        name,
+        model: form.model,
+        image: imageRef(form.imageTag),
+        port: Number(form.port),
+        gpus: form.gpus,
+        cache_dir: form.cacheDir,
+        api_key: form.apiKey || null,
+        hf_token: form.hfToken || null,
+        max_model_len: Number(form.maxModelLen),
+        max_num_seqs: Number(form.maxNumSeqs),
+        memory_share: Number(form.memoryShare),
+        allow_long_context: form.allowLongContext,
+        tool_calling: form.toolCalling,
+        tool_parser: form.toolParser,
+        auto_restart: form.autoRestart,
+        extra_args: form.extraArgs.trim().replace(/\s+/g, " "),
+        register_as: { name, url, served_name: servedName, idle_minutes: Number(form.idle), priority: Number(form.priority) },
+      });
+      toast.show("success", `“${name}” is starting on ${form.server}. It loads for a few minutes, then Wakeful puts it to sleep until a request arrives.`);
+      onRegistered();
+    } catch (err) {
+      toast.show("error", err instanceof Error ? err.message : "Could not create the container.");
+      setBusy(undefined);
+    }
   }
 
   async function register() {
@@ -245,6 +277,13 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
 
         {step === LAST_STEP ? (
           <>
+            {chosen?.has_agent ? (
+              <div className="callout start-choice">
+                <strong>{chosen.name} has an agent.</strong>
+                <span>Wakeful can start this container for you and register it in one step, with the settings above. The Hugging Face token, if you entered one, is sent to the agent once and not stored by Wakeful.</span>
+                <span className="dim">Or run the command yourself below and register it afterwards.</span>
+              </div>
+            ) : null}
             <FormSection grow title="1 · Start the container" hint="Run this on the GPU machine. Highlighted lines are what Wakeful needs for sleep mode.">
               <CommandPanel lines={buildVllmLines(params, revealed)} command={command} hasSecrets={form.apiKey !== "" || form.hfToken !== ""} revealed={revealed} onReveal={setRevealed} />
             </FormSection>
@@ -264,7 +303,10 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
         ) : (
           <>
             <button type="button" className="btn" disabled={busy !== undefined || here.length > 0} onClick={() => void runCheck()}>{busy === "check" ? "Testing…" : "Test connection"}</button>
-            <button type="button" className="btn primary" disabled={busy !== undefined || here.length > 0} onClick={() => void register()}>{busy === "register" ? "Registering…" : "Register model"}</button>
+            <button type="button" className={`btn ${chosen?.has_agent ? "" : "primary"}`} disabled={busy !== undefined || here.length > 0} onClick={() => void register()}>{busy === "register" ? "Registering…" : "Register model"}</button>
+            {chosen?.has_agent ? (
+              <button type="button" className="btn primary" disabled={busy !== undefined || here.length > 0} onClick={() => void createAndRegister()}>{busy === "create" ? "Creating…" : "Create and register"}</button>
+            ) : null}
           </>
         )}
       </footer>

@@ -12,6 +12,7 @@ import "./styles/components.css";
 import "./styles/layout.css";
 import "./styles/landing.css";
 import "./styles/addmodel.css";
+import "./styles/containers.css";
 import "./styles/usage.css";
 import "./styles/connect.css";
 import "./styles/gradients.css";

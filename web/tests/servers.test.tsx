@@ -8,7 +8,7 @@ import { mockApi, status, visit } from "./helpers";
 
 describe("Servers screen", () => {
   const admin = { username: "root", role: "admin", csrf_token: "csrf-1" };
-  const server = (name: string, gpu_count: number, models: string[] = []) => ({ name, gpu_count, gpu_type: null, models, created_at: "2026-01-01T00:00:00Z" });
+  const server = (name: string, gpu_count: number, models: string[] = []) => ({ name, gpu_count, gpu_type: null, agent_url: null, has_agent: false, models, created_at: "2026-01-01T00:00:00Z" });
 
   beforeEach(() => {
     visit("/servers");

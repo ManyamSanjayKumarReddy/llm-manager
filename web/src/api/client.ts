@@ -4,12 +4,16 @@
 import type {
   ApiKey,
   AuditEntry,
+  Container,
+  ContainerLogs,
   CreatedApiKey,
+  HostStats,
   ManagedModel,
   ModelChanges,
   ModelCheck,
   ModelStats,
   NewApiKey,
+  NewContainer,
   NewModel,
   NewUser,
   Page,
@@ -147,9 +151,23 @@ export const api = {
 
   servers: () => request<Server[]>("GET", "/api/servers"),
   addServer: (server: { name: string; gpu_count: number; gpu_type: string | null }) => request<Server>("POST", "/api/servers", server),
-  updateServer: (name: string, changes: { gpu_count?: number; gpu_type?: string }) =>
+  /** An empty ``agent_url`` removes the agent (and forgets its token). */
+  updateServer: (name: string, changes: { gpu_count?: number; gpu_type?: string; agent_url?: string; agent_token?: string }) =>
     request<Server>("PATCH", `/api/servers/${id(name)}`, changes),
   removeServer: (name: string) => send("DELETE", `/api/servers/${id(name)}`),
+
+  hostStats: (server: string) => request<HostStats>("GET", `/api/servers/${id(server)}/host`),
+  containers: (server: string, q: ListQuery) => request<Page<Container>>("GET", `/api/servers/${id(server)}/containers${query(q)}`),
+  createContainer: (server: string, container: NewContainer) =>
+    request<Container>("POST", `/api/servers/${id(server)}/containers`, container),
+  startContainer: (server: string, name: string) => request<Container>("POST", `/api/servers/${id(server)}/containers/${id(name)}/start`),
+  stopContainer: (server: string, name: string) => request<Container>("POST", `/api/servers/${id(server)}/containers/${id(name)}/stop`),
+  restartContainer: (server: string, name: string) => request<Container>("POST", `/api/servers/${id(server)}/containers/${id(name)}/restart`),
+  /** ``removeModel`` must be true when a model is registered for the container. */
+  removeContainer: (server: string, name: string, removeModel: boolean) =>
+    send("DELETE", `/api/servers/${id(server)}/containers/${id(name)}?remove_model=${removeModel}`),
+  containerLogs: (server: string, name: string, tail: number) =>
+    request<ContainerLogs>("GET", `/api/servers/${id(server)}/containers/${id(name)}/logs?tail=${tail}`),
 
   models: (q: ListQuery & { q?: string }) => request<Page<ManagedModel>>("GET", `/api/models${query(q)}`),
   registerModel: (model: NewModel) => request<ManagedModel>("POST", "/api/models", model),

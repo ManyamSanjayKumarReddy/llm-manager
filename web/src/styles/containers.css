@@ -1,0 +1,17 @@
+/* controlling containers through a server's agent */
+.host-stats { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--hair); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.02); }
+.host-meter { display: grid; grid-template-columns: 64px minmax(80px, 1fr) minmax(0, 2fr); gap: 12px; align-items: center; font-size: 13px; }
+.host-meter-label { font: 11px var(--font-mono); text-transform: uppercase; color: var(--dim); }
+.host-meter .bar { height: 8px; }
+.host-meter .bar > i.full { background: linear-gradient(90deg, var(--rose), var(--amber)); }
+.host-meter-text { font-variant-numeric: tabular-nums; }
+.agent-cell { display: grid; gap: 8px; }
+.agent-cell .actions-cell { justify-content: flex-start; }
+td .small-text { display: block; }
+.icon-btn.danger { color: var(--rose); }
+.logs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+pre.logs { flex: 1 1 auto; min-height: 240px; margin: 0; padding: 12px 14px; overflow: auto; font: 12px/1.5 var(--font-mono); color: var(--bone); background: rgba(0, 0, 0, 0.35); border: 1px solid var(--hair); border-radius: var(--radius-sm); white-space: pre; }
+pre.logs.wrap { white-space: pre-wrap; word-break: break-all; }
+dialog .actions .btn.spacer { margin-right: auto; }
+.start-choice { display: grid; gap: 8px; }
+@media (max-width: 640px) { .host-meter { grid-template-columns: 56px 1fr; } .host-meter-text { grid-column: 1 / -1; } }

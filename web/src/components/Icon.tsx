@@ -1,5 +1,8 @@
 const PATHS = {
   plus: "M12 5v14M5 12h14",
+  play: "M7 5v14l11-7z",
+  stop: "M6 6h12v12H6z",
+  terminal: "M4 5h16v14H4zM8 10l3 2-3 2M13 15h4",
   "arrow-left": "M19 12H5M11 6l-6 6 6 6",
   "arrow-right": "M5 12h14M13 6l6 6-6 6",
   "chevron-down": "m6 9 6 6 6-6",
