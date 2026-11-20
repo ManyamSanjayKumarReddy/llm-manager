@@ -19,6 +19,7 @@ from llm_manager.api.routers import (
     auth,
     containers,
     health,
+    install,
     models,
     proxy,
     scheduling,
@@ -152,6 +153,7 @@ def create_app(
     register_exception_handlers(app)
     for module in (
         health,
+        install,
         agent_connect,
         auth,
         users,

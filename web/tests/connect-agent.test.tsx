@@ -29,7 +29,7 @@ describe("An agent that connects out", () => {
       ...more,
     });
 
-  it("creates a token, shows the two settings once, and tells the admin what to do with them", async () => {
+  it("creates a token and shows the one command to run on the server, once", async () => {
     let servers = [server("edge")];
     const calls = base(() => servers, {
       "POST /api/servers/edge/tunnel": () => {
@@ -44,7 +44,9 @@ describe("An agent that connects out", () => {
     expect(within(dialog).getByText("No connection set up")).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Create connection token" }));
-    const settings = await within(dialog).findByLabelText("Agent settings");
+    const command = await within(dialog).findByLabelText("Install command");
+    expect(command.textContent).toBe(`curl -fsSL ${window.location.origin}/install-agent.sh | sudo bash -s -- wkt_${"x".repeat(43)}`);
+    const settings = within(dialog).getByLabelText("Agent settings", { selector: "pre" });
     expect(settings.textContent).toBe(`AGENT_CONNECT_URL=ws://${window.location.host}/api/agent/connect\nAGENT_CONNECT_TOKEN=wkt_${"x".repeat(43)}`);
     expect(within(dialog).getByText(/shown only once/)).toBeInTheDocument();
     expect(within(dialog).getByText(/The agent has not connected yet/)).toBeInTheDocument();

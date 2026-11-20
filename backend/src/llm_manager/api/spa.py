@@ -5,7 +5,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
-_API_PREFIXES = ("api/", "v1/", "healthz")
+_API_PREFIXES = ("api/", "v1/", "healthz", "install-agent.sh")
 
 
 class SpaStaticFiles(StaticFiles):

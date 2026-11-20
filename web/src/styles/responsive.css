@@ -35,6 +35,7 @@
 dialog { padding: 0; max-width: calc(100vw - 24px); }
 /* small confirm-style popups: the form itself carries the padding */
 dialog:not(.modal-lg) > form { padding: 24px; }
+dialog.modal-md { width: min(600px, calc(100vw - 32px)); }
 /* large popups: header, scrolling body and footer stack inside the form (or the dialog itself) */
 /* One fixed size for every step, so the popup never jumps; the middle part scrolls. */
 dialog.modal-lg { width: min(780px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 40px)); }

@@ -42,14 +42,17 @@ export function ConnectDialog({ server, onClose, onChanged }: Props) {
   const revoke = () =>
     void run(async () => { await api.revokeTunnel(server.name); setEnrolled(undefined); }, `${server.name} no longer accepts its agent.`);
 
-  const connectUrl = enrolled ? `${window.location.origin.replace(/^http/, "ws")}${enrolled.connect_path}` : "";
+  const origin = window.location.origin;
+  const connectUrl = `${origin.replace(/^http/, "ws")}${enrolled?.connect_path ?? "/api/agent/connect"}`;
+  const command = enrolled ? `curl -fsSL ${origin}/install-agent.sh | sudo bash -s -- ${enrolled.token}` : "";
   const settings = enrolled ? `AGENT_CONNECT_URL=${connectUrl}\nAGENT_CONNECT_TOKEN=${enrolled.token}` : "";
 
   return (
-    <div>
+    // A form, like the other small popups, so it gets their padding and spacing.
+    <form className="connect-dialog" onSubmit={(e) => { e.preventDefault(); }}>
       <h2>Connect the agent on {server.name}</h2>
       <p className="dim">
-        The agent on that machine connects out to Wakeful and keeps the connection open. The machine needs no open port, no certificate and no web-server rule, so this works behind a firewall. Wakeful then controls its containers and reaches its models through that connection.
+        The agent on that machine connects out to Wakeful, so the machine needs no open port or certificate and works behind a firewall.
       </p>
 
       <p>
@@ -65,16 +68,21 @@ export function ConnectDialog({ server, onClose, onChanged }: Props) {
 
       {enrolled ? (
         <>
-          <div className="alert" role="status">
-            <strong>Copy these now.</strong> The token is shown only once and cannot be recovered; if you lose it, create a new one.
+          <div className="alert success" role="status">
+            <strong>Copy it now.</strong> The token is shown only once; if you lose it, create a new one.
           </div>
-          <pre className="command wrap" aria-label="Agent settings" tabIndex={0}>{settings}</pre>
-          <div className="actions"><CopyButton value={settings} label="agent settings" /></div>
-          <ol className="connect-steps">
-            <li>On {server.name}, put these two lines in <code>/etc/wakeful-agent.env</code> (remove <code>AGENT_TOKEN</code>; it is not needed).</li>
-            <li>If some containers there were not created by Wakeful, add <code>AGENT_RELAY_PORTS=8025,8026</code> with their ports.</li>
-            <li>Run <code>systemctl enable --now wakeful-agent</code> (or restart it). This page shows when it connects.</li>
-          </ol>
+          <p>On {server.name}, run this command:</p>
+          <pre className="command wrap connect-cmd" aria-label="Install command" tabIndex={0}>{command}</pre>
+          <div className="actions"><CopyButton value={command} label="install command" /></div>
+          <p className="dim">
+            It needs Docker and the NVIDIA container toolkit, which a vLLM server already has. This page shows "Connected" within a few seconds. Run the same command again to update the agent later. Containers there that Wakeful did not create need <code>--relay-ports 8025,8026</code> (their ports) added to it.
+          </p>
+          <details className="connect-manual">
+            <summary>Set it up by hand instead</summary>
+            <p>Put these two lines in the agent's settings (<code>/etc/wakeful-agent.env</code> when it runs as a service) and restart it:</p>
+            <pre className="command wrap connect-cmd" aria-label="Agent settings" tabIndex={0}>{settings}</pre>
+            <div className="actions"><CopyButton value={settings} label="agent settings" /></div>
+          </details>
         </>
       ) : null}
 
@@ -111,6 +119,6 @@ export function ConnectDialog({ server, onClose, onChanged }: Props) {
           </>
         )}
       </div>
-    </div>
+    </form>
   );
 }

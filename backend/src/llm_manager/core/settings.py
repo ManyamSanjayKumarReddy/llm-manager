@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     audit_retention_days: int = Field(365, ge=30)
     usage_retention_days: int = Field(730, ge=30, description="daily token and request totals")
 
+    # The agent that clients install on their GPU servers (see /install-agent.sh)
+    agent_docker_image: str = Field(
+        "wakeful/agent:latest",
+        description="Docker image the install command pulls; set it to the one you published",
+    )
+
     # Reverse proxy
     trust_proxy: bool = False  # take the client IP from X-Real-IP (only behind a proxy you control)
     allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)

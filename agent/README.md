@@ -35,7 +35,38 @@ Wakeful (opslocal) ──https + token──> Apache on the GPU server ──> a
   `scripts/vllm-abort-sleep`), otherwise creating answers "image is not on this server yet".
 - Every action is recorded in Wakeful's audit trail.
 
-## Install (on each GPU server, once)
+## Install with one command (recommended)
+
+In the dashboard open **Servers**, click *Connect agent*, then *Create connection token*. It shows a
+command like this, with the token in it (once):
+
+```bash
+curl -fsSL https://wakeful.example.com/install-agent.sh | sudo bash -s -- wkt_...
+```
+
+Run it on the GPU server. It needs Docker, and the NVIDIA Container Toolkit for the GPUs. It
+downloads the agent as a Docker image, starts it with `--restart unless-stopped`, saves the token in
+`/etc/wakeful-agent/agent.env` (root only) and waits until the agent is connected. The dialog in the
+dashboard shows "Connected" too.
+
+* **Update:** run the same command again (no token needed; it is remembered).
+* **Remove:** `curl -fsSL https://wakeful.example.com/install-agent.sh | sudo bash -s -- --remove`.
+* **Options:** `--cache /data/hf,/home/me/.cache` (folders containers may mount; default is the
+  `~/.cache` of the sudo user and of root) and `--relay-ports 8025,8026` (containers that Wakeful did
+  not create).
+* The container uses host networking (to reach vLLM on 127.0.0.1) and the Docker socket (to control
+  containers), and drops all other capabilities. Logs: `docker logs -f wakeful-agent`.
+
+For the operator of Wakeful (once):
+
+1. Build and publish the image: `docker login`, then `agent/deploy/publish-image.sh yourhubuser/wakeful-agent`.
+2. Set `AGENT_DOCKER_IMAGE=yourhubuser/wakeful-agent:latest` in Wakeful's `.env` and restart it. The
+   install command then pulls that image (the default `wakeful/agent:latest` is only a placeholder).
+3. Let WebSockets through on `/api/agent/connect` in your web server (see below).
+
+## Install by hand (on each GPU server, once)
+
+Without Docker, as a systemd service:
 
 ```bash
 # 1. the code (any folder; the unit below assumes /opt/wakeful-agent)

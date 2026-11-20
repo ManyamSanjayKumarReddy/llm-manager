@@ -74,7 +74,7 @@ export function Servers() {
       <Modal open={agentServer !== undefined} onClose={() => { setAgentFor(undefined); }} label="Agent settings">
         {agentServer ? <AgentDialog server={agentServer} onClose={() => { setAgentFor(undefined); }} onChanged={() => { setAgentFor(undefined); void servers.reload(); }} /> : null}
       </Modal>
-      <Modal open={connectServer !== undefined} onClose={() => { setConnectFor(undefined); }} label="Connect agent">
+      <Modal open={connectServer !== undefined} onClose={() => { setConnectFor(undefined); }} label="Connect agent" size="md">
         {connectServer ? <ConnectDialog server={connectServer} onClose={() => { setConnectFor(undefined); }} onChanged={() => { void servers.reload(); }} /> : null}
       </Modal>
       <Modal open={containerServer !== undefined} onClose={() => { setContainersFor(undefined); }} label="Containers" size="lg">
