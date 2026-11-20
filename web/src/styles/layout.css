@@ -69,8 +69,8 @@
 .model.is-awake { box-shadow: 0 30px 80px -40px rgba(139, 243, 230, 0.45); }
 .model-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .model-head h3 { font-size: 22px; overflow-wrap: anywhere; }
-.gpu-chips { display: flex; gap: 6px; margin-top: 8px; }
-.gpu-chip { font: 11px var(--font-mono); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--hair-strong); color: var(--dim); }
+.gpu-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.gpu-chip { white-space: nowrap; font: 11px var(--font-mono); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--hair-strong); color: var(--dim); }
 .is-awake .gpu-chip { border-color: rgba(139, 243, 230, 0.4); color: var(--foam); }
 .facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 18px; margin: 0; }
 .facts div { display: grid; gap: 2px; }

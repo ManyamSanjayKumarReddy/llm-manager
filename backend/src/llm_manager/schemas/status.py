@@ -10,7 +10,11 @@ from llm_manager.schemas.base import ResponseSchema
 class ModelStatus(ResponseSchema):
     """Live state and counters of one model (counters reset when the router restarts)."""
 
+    server: str = Field(description="the server it runs on")
     state: str
+    detail: str | None = Field(
+        None, description="why a model is starting or down, when the server's agent could tell"
+    )
     priority: int
     gpus: list[int]
     inflight: int
@@ -37,6 +41,21 @@ class GpuHolder(ResponseSchema):
     state: str
 
 
+class ServerGpu(ResponseSchema):
+    """One GPU of a server and who holds it."""
+
+    gpu: int
+    model: str | None
+    state: str | None
+
+
+class ServerStatus(ResponseSchema):
+    """The GPUs (those a model is registered on) of one server, grouped for the dashboard."""
+
+    name: str
+    gpus: list[ServerGpu]
+
+
 class EventOut(ResponseSchema):
     """A wake/sleep/failure event."""
 
@@ -52,6 +71,7 @@ class StatusOut(ResponseSchema):
     uptime_s: int
     models: dict[str, ModelStatus]
     gpus: dict[str, GpuHolder | None]
+    servers: list[ServerStatus] = Field(default_factory=list)
     events: list[EventOut]
 
 

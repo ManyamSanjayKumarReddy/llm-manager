@@ -7,7 +7,7 @@ import { Reveal } from "../../components/Reveal";
 import { Deco } from "../../components/Stickers";
 import { Pill } from "../../components/ui";
 import { Link } from "../../router/Link";
-import { FAQ, FEATURES, PRIORITY_STEPS, STEPS, TICKER, type IconName } from "./content";
+import { CONNECT_STEPS, FAQ, FEATURES, PRIORITY_STEPS, STEPS, TICKER, type IconName } from "./content";
 import { HeroDemo } from "./HeroDemo";
 
 const ICONS: Record<IconName, string> = {
@@ -19,6 +19,9 @@ const ICONS: Record<IconName, string> = {
   chart: "M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6",
   shield: "M12 3 5 6v6c0 4.4 3 7.3 7 9 4-1.7 7-4.6 7-9V6z",
   sliders: "M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M8 15v4",
+  server: "M4 5h16v5H4zM4 14h16v5H4zM8 7.5h.01M8 16.5h.01",
+  box: "m12 3 8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12 4 7.5",
+  pulse: "M3 12h4l3-7 4 14 3-7h4",
 };
 
 function Icon({ name }: { name: IconName }) {
@@ -39,6 +42,7 @@ export function Landing({ signedIn }: { signedIn: boolean }) {
         <Marquee items={TICKER} />
         <Problem />
         <HowItWorks />
+        <Connect />
         <Features />
         <Priority />
         <Snippet />
@@ -65,6 +69,7 @@ function Nav({ signedIn }: { signedIn: boolean }) {
       <Logo to="/" />
       <nav aria-label="Page sections" className="landing-links">
         <a href="#how">How it works</a>
+        <a href="#connect">Connect</a>
         <a href="#features">Features</a>
         <a href="#priority">Priority</a>
         <a href="#faq">FAQ</a>
@@ -154,6 +159,48 @@ function HowItWorks() {
           </Reveal>
         ))}
       </div>
+    </section>
+  );
+}
+
+function Connect() {
+  const [copied, setCopied] = useState(false);
+  const origin = window.location.origin;
+  const command = `curl -fsSL ${origin}/install-agent.sh | sudo bash -s -- wkt_YOUR_TOKEN`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => { setCopied(false); }, 2000);
+    } catch {
+      // clipboard blocked: the text stays selectable
+    }
+  }
+  return (
+    <section className="section split" id="connect" aria-labelledby="connect-title">
+      <Reveal>
+        <span className="eyebrow">Connect a server</span>
+        <h2 id="connect-title" className="display">One command connects a <em>GPU server</em>.</h2>
+        <p className="dim lead">The agent runs as a small container on the machine and connects out to {BRAND.name}. No open port, no certificate, no firewall change, so it works behind any network.</p>
+        <ol className="flow-list">
+          {CONNECT_STEPS.map((step, i) => (
+            <li key={step.title}>
+              <span className="tl-no mono">{i + 1}</span>
+              <div><strong>{step.title}</strong><span className="dim">{step.text}</span></div>
+            </li>
+          ))}
+        </ol>
+      </Reveal>
+      <Reveal delay={120}>
+        <div className="code-card surface">
+          <div className="code-tabs">
+            <span className="mono dim small-text">on the GPU server</span>
+            <button type="button" className="btn small copy-code" onClick={() => void copy()}>{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <pre className="command wrap" aria-label="Install command"><code>{command}</code></pre>
+        </div>
+      </Reveal>
     </section>
   );
 }
@@ -306,6 +353,7 @@ function Footer({ signedIn }: { signedIn: boolean }) {
       <Logo size={22} to="/" />
       <nav aria-label="Footer">
         <a href="#how">How it works</a>
+        <a href="#connect">Connect</a>
         <a href="#features">Features</a>
         <a href="#faq">FAQ</a>
         <Link to={signedIn ? "/overview" : "/signin"}>{signedIn ? "Dashboard" : "Sign in"}</Link>

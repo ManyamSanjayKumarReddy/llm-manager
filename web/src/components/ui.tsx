@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 export type Tone = "ok" | "idle" | "warn" | "bad";
 
-const STATE_TONE: Record<string, Tone> = { awake: "ok", asleep: "idle", waking: "warn", sleeping: "warn", failed: "bad", down: "bad" };
+const STATE_TONE: Record<string, Tone> = { awake: "ok", asleep: "idle", waking: "warn", sleeping: "warn", starting: "warn", failed: "bad", down: "bad" };
 
 /** A state label with a dot; colour follows the state (awake, asleep, waking, ...). */
 export function Pill({ children, tone }: { children: string; tone?: Tone }) {

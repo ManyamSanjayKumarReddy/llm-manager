@@ -64,7 +64,7 @@ describe("An agent that connects out", () => {
     });
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(await screen.findByRole("button", { name: "Agent settings" }));
     const dialog = await screen.findByRole("dialog", { name: "Connect agent" });
     expect(await within(dialog).findByText("Connected (agent 0.1.0)")).toBeInTheDocument();
 
@@ -78,7 +78,7 @@ describe("An agent that connects out", () => {
   it("says so in the row while the agent is not connected, and does not ask it for stats", async () => {
     const calls = base(() => [server("edge", { has_agent: true, tunnel: true, tunnel_connected: false })]);
     render(<App />);
-    expect(await screen.findByText("Not connected")).toBeInTheDocument();
+    expect(await screen.findByText("not connected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Containers" })).toBeDisabled();
     expect(calls.some((c) => c.key === "GET /api/servers/edge/host")).toBe(false);
   });
@@ -88,7 +88,7 @@ describe("An agent that connects out", () => {
       "GET /api/servers/old/host": () => ({ body: { gpus: [], gpu_error: null, ram_total_mb: 1000, ram_available_mb: 500, swap_total_mb: 0, swap_used_mb: 0, disk_total_gb: 10, disk_free_gb: 5, disk_path: "/", cpu_count: 2, load_1m: 0.1 } }),
     });
     render(<App />);
-    expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Agent settings" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Connect agent" })).not.toBeInTheDocument();
   });
 });

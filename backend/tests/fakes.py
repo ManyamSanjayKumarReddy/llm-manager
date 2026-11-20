@@ -226,6 +226,7 @@ class FakeAgent:
         )
         self.containers: dict[str, dict[str, Any]] = {}
         self.created: list[dict[str, Any]] = []
+        self.log_text: str | None = None  # what the containers' logs say (default: a filler line)
         self.calls: list[tuple[str, str]] = []
         self.app = self._build()
 
@@ -356,6 +357,7 @@ class FakeAgent:
         @app.get("/containers/{name}/logs")
         async def logs(name: str, tail: int = 200) -> dict[str, Any]:
             get(name)
-            return {"name": name, "text": f"last {tail} lines\n", "truncated": False}
+            text = self.log_text if self.log_text is not None else f"last {tail} lines\n"
+            return {"name": name, "text": text, "truncated": False}
 
         return app

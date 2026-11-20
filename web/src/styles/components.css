@@ -38,8 +38,8 @@ select.input { appearance: none; cursor: pointer; padding-right: 36px;
 .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pill.awake, .pill.ok { color: var(--foam); border-color: rgba(139, 243, 230, 0.35); background: rgba(139, 243, 230, 0.08); }
 .pill.awake .dot, .live-dot { box-shadow: 0 0 0 0 currentColor; animation: pulse 2s infinite; }
-.pill.waking, .pill.sleeping, .pill.warn { color: var(--amber); border-color: rgba(255, 184, 77, 0.35); background: rgba(255, 184, 77, 0.08); }
-.pill.waking .dot, .pill.sleeping .dot { animation: pulse 0.9s infinite; }
+.pill.waking, .pill.sleeping, .pill.starting, .pill.warn { color: var(--amber); border-color: rgba(255, 184, 77, 0.35); background: rgba(255, 184, 77, 0.08); }
+.pill.waking .dot, .pill.sleeping .dot, .pill.starting .dot { animation: pulse 0.9s infinite; }
 .pill.failed, .pill.down, .pill.bad { color: var(--rose); border-color: rgba(255, 107, 139, 0.35); background: rgba(255, 107, 139, 0.08); }
 .pill.asleep, .pill.idle { color: var(--dim); }
 .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--foam); color: var(--foam); }

@@ -18,6 +18,14 @@ class State(StrEnum):
     DOWN = "down"  # container unreachable
 
 
+@dataclass(frozen=True)
+class Diagnosis:
+    """Why a container does not answer: still loading, or not working (and the reason)."""
+
+    starting: bool
+    detail: str
+
+
 # States in which a model still occupies GPU memory.
 HOLDS_GPU = frozenset({State.AWAKE, State.WAKING, State.SLEEPING})
 
@@ -38,6 +46,10 @@ class ModelRuntime:
     # Set while a higher-priority model has asked for this model's running requests to stop.
     preempt_event: asyncio.Event = field(default_factory=asyncio.Event)
     reprobing: bool = False  # someone is already asking a DOWN model whether it is back
+    # Why the container does not answer, when its server's agent could tell: it is still loading
+    # (``starting``, shown to people as "starting") or it is not working (the reason).
+    starting: bool = False
+    detail: str | None = None
     stop_requested: bool = False  # a stop is being prepared or in force for this model
     # Do vLLM's token counters move while this model works? Learned just before a stop, when it
     # is certainly busy; None until then. Without it the engine cannot be proven idle.
@@ -53,6 +65,13 @@ class ModelRuntime:
     waits: int = 0  # requests that had to wait for a wake or a swap
     wait_total_s: float = 0.0
     wait_max_s: float = 0.0
+
+    @property
+    def shown_state(self) -> str:
+        """The state people see: a container that is still loading is "starting", not "down"."""
+        if self.state is State.DOWN and self.starting:
+            return "starting"
+        return self.state.value
 
     @property
     def served_name(self) -> str:

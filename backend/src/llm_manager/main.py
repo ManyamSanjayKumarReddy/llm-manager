@@ -121,6 +121,7 @@ def create_app(
                         task.add_done_callback(refreshes.discard)
 
             tunnels.on_connected = agent_connected
+            container.manager.diagnose = container.containers.diagnose
             container.manager.event_sink = container.recorder.record_event
 
             background = [

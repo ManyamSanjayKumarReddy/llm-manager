@@ -9,8 +9,12 @@ export interface SessionInfo {
 }
 
 export interface ModelStatus {
-  /** asleep | waking | awake | sleeping | failed | down */
+  /** The server it runs on. */
+  server?: string;
+  /** asleep | waking | awake | sleeping | starting | failed | down */
   state: string;
+  /** Why it is starting or down, when its server's agent could tell. */
+  detail?: string | null;
   priority: number;
   gpus: number[];
   inflight: number;
@@ -37,10 +41,17 @@ export interface RouterEvent {
   detail: string;
 }
 
+/** The GPUs of one server (those a model is registered on) and who holds each. */
+export interface ServerGpus {
+  name: string;
+  gpus: { gpu: number; model: string | null; state: string | null }[];
+}
+
 export interface StatusData {
   uptime_s: number;
   models: Record<string, ModelStatus>;
   gpus: Record<string, GpuHolder | null>;
+  servers?: ServerGpus[];
   events: RouterEvent[];
 }
 
@@ -155,6 +166,8 @@ export interface ManagedModel {
   container: string | null;
   created_at: string;
   state: string;
+  /** Why it is starting or down, when known. */
+  detail?: string | null;
   inflight: number;
   waiting: number;
 }
@@ -281,6 +294,8 @@ export interface Container {
   /** The registered model that uses it, and that model's wake/sleep state. */
   registered_as: string | null;
   model_state: string | null;
+  /** Why that model is starting or down, when known. */
+  model_detail?: string | null;
 }
 
 /** What the agent needs to create a container (sleep mode is always on). */

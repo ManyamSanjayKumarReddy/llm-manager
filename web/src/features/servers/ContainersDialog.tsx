@@ -8,6 +8,7 @@ import { Pagination } from "../../components/Pagination";
 import { Pill, type Tone } from "../../components/ui";
 import { useAsync } from "../../hooks/useAsync";
 import { usePagedList } from "../../hooks/usePagedList";
+import { Link } from "../../router/Link";
 import { useToast } from "../toast/context";
 import { HostStatsView } from "./HostStats";
 import { LogsDialog } from "./LogsDialog";
@@ -58,7 +59,7 @@ export function ContainersDialog({ server, onClose, onChanged }: Props) {
 
   return (
     <>
-      <ModalHeader title={`Containers · ${server.name}`} subtitle="Started and stopped through this server’s agent. Only containers created from Wakeful are listed." onClose={onClose} />
+      <ModalHeader title={`Containers · ${server.name}`} subtitle="The vLLM containers Wakeful started on this server, and how the machine is doing." onClose={onClose} />
       <div className="modal-body">
         <section aria-label="Server load">
           {host.error ? <div className="alert error" role="alert">{host.error}</div> : host.data ? <HostStatsView stats={host.data} /> : <div className="skeleton" aria-hidden="true" />}
@@ -66,39 +67,54 @@ export function ContainersDialog({ server, onClose, onChanged }: Props) {
 
         {list.error ? <div className="alert error" role="alert">{list.error}</div> : null}
         {!list.loading && list.total === 0 && !list.error ? (
-          <p className="no-match">No containers yet. Add a model from the Models page and choose to start it for you.</p>
+          <div className="cc-empty">
+            <strong>No containers yet</strong>
+            <p className="dim">Add a model on the Models page and choose “Create and register”: Wakeful starts the container here and registers it.</p>
+            <Link className="btn small primary" to="/models">Add a model</Link>
+          </div>
         ) : null}
-        <div className={`table-wrap ${list.fetching ? "fetching" : ""}`} hidden={list.total === 0}>
-          <table className="cards">
-            <thead><tr><th>Container</th><th>State</th><th>Port · GPUs</th><th /></tr></thead>
-            <tbody>
-              {list.items.map((c) => (
-                <tr key={c.name}>
-                  <td className="primary">
-                    <strong>{c.name}</strong>
-                    <span className="dim mono small-text">{c.model ?? c.image}</span>
-                    {c.registered_as ? <span className="dim small-text">model “{c.registered_as}”{c.model_state ? ` · ${c.model_state}` : ""}</span> : null}
-                  </td>
-                  <td data-label="State"><Pill tone={toneOf(c)}>{labelOf(c)}</Pill><span className="dim small-text">{c.status}</span></td>
-                  <td data-label="Port · GPUs">{c.port === null ? <span className="dim">n/a</span> : <span className="mono">{c.port}</span>} {c.gpus.map((g) => <span key={g} className="gpu-chip">GPU {g}</span>)}</td>
-                  <td data-label="">
-                    <div className="actions-cell">
-                      {c.running ? (
-                        <button type="button" className="icon-btn" disabled={busy === c.name} onClick={() => void act("stop", c)} aria-label={`Stop ${c.name}`} title="Stop"><Icon name="stop" size={16} /></button>
-                      ) : (
-                        <button type="button" className="icon-btn" disabled={busy === c.name} onClick={() => void act("start", c)} aria-label={`Start ${c.name}`} title="Start"><Icon name="play" size={16} /></button>
-                      )}
-                      <button type="button" className="icon-btn" disabled={busy === c.name} onClick={() => void act("restart", c)} aria-label={`Restart ${c.name}`} title="Restart"><Icon name="refresh" size={16} /></button>
-                      <button type="button" className="icon-btn" onClick={() => { setLogsOf(c.name); }} aria-label={`Logs of ${c.name}`} title="Logs"><Icon name="terminal" size={16} /></button>
-                      <button type="button" className="icon-btn danger" disabled={busy === c.name} onClick={() => { setRemoving(c); }} aria-label={`Remove ${c.name}`} title="Remove"><Icon name="trash" size={16} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={list.page} pages={list.pages} total={list.total} pageSize={list.pageSize} noun="containers" onPage={list.setPage} onPageSize={list.setPageSize} />
+        <ul className={`container-list ${list.fetching ? "fetching" : ""}`} hidden={list.total === 0}>
+          {list.items.map((c) => (
+            <li key={c.name} className="container-card" aria-label={`Container ${c.name}`}>
+              <div className="cc-top">
+                <div className="cc-title">
+                  <strong>{c.name}</strong>
+                  <span className="dim mono">{c.model ?? c.image}</span>
+                </div>
+                <Pill tone={toneOf(c)}>{labelOf(c)}</Pill>
+              </div>
+              <div className="cc-chips">
+                {c.port === null ? null : <span className="gpu-chip">port {c.port}</span>}
+                {c.gpus.map((g) => <span key={g} className="gpu-chip">GPU {g}</span>)}
+                <span className="dim small-text">{c.status}</span>
+              </div>
+              {c.registered_as ? (
+                <div className="cc-model">
+                  <div className="cc-model-line">
+                    <span className="dim">Model</span> <strong>{c.registered_as}</strong>
+                    {c.model_state ? <Pill>{c.model_state}</Pill> : null}
+                  </div>
+                  {c.model_detail && (c.model_state === "down" || c.model_state === "starting") ? (
+                    <p className={`model-note ${c.model_state}`} role="status">{c.model_detail}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="cc-model dim">Not registered as a model yet.</div>
+              )}
+              <div className="cc-actions">
+                {c.running ? (
+                  <button type="button" className="btn small" disabled={busy === c.name} onClick={() => void act("stop", c)} aria-label={`Stop ${c.name}`}><Icon name="stop" size={14} /> Stop</button>
+                ) : (
+                  <button type="button" className="btn small primary" disabled={busy === c.name} onClick={() => void act("start", c)} aria-label={`Start ${c.name}`}><Icon name="play" size={14} /> Start</button>
+                )}
+                <button type="button" className="btn small" disabled={busy === c.name} onClick={() => void act("restart", c)} aria-label={`Restart ${c.name}`}><Icon name="refresh" size={14} /> Restart</button>
+                <button type="button" className="btn small" onClick={() => { setLogsOf(c.name); }} aria-label={`Logs of ${c.name}`}><Icon name="terminal" size={14} /> Logs</button>
+                <button type="button" className="btn small danger right" disabled={busy === c.name} onClick={() => { setRemoving(c); }} aria-label={`Remove ${c.name}`}><Icon name="trash" size={14} /> Remove</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {list.total > list.pageSize ? <Pagination page={list.page} pages={list.pages} total={list.total} pageSize={list.pageSize} noun="containers" onPage={list.setPage} onPageSize={list.setPageSize} /> : null}
       </div>
 
       <Modal open={removing !== undefined} onClose={() => { setRemoving(undefined); }} label="Remove container">

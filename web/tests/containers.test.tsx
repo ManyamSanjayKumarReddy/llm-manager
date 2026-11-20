@@ -64,14 +64,17 @@ describe("Containers on a server", () => {
     expect(await screen.findByRole("button", { name: "Containers" })).toBeInTheDocument();
   });
 
-  it("shows a server's load in its row, and says when the agent cannot be reached", async () => {
+  it("shows a server's load on its card, and says when the agent cannot be reached", async () => {
     base([server("good", { has_agent: true, agent_url: "https://a" }), server("bad", { has_agent: true, agent_url: "https://b" })], {
       "GET /api/servers/good/host": () => ({ body: host }),
       "GET /api/servers/bad/host": () => ({ status: 503, body: { detail: "cannot reach the agent" } }),
     });
     render(<App />);
-    expect(await screen.findByText(/RAM 20\.0 GB free · GPU 1\.0 GB of 16\.0 GB/)).toBeInTheDocument();
-    expect(await screen.findByText("Agent not reachable")).toBeInTheDocument();
+    const good = await screen.findByRole("article", { name: "Server good" });
+    expect(await within(good).findByRole("meter", { name: "RAM" })).toBeInTheDocument();
+    expect(within(good).getByRole("meter", { name: "GPU 0" })).toBeInTheDocument();
+    const bad = screen.getByRole("article", { name: "Server bad" });
+    expect(await within(bad).findByText(/The agent could not be reached/)).toBeInTheDocument();
   });
 
   it("lists containers with their models and load, and stops one", async () => {
@@ -88,13 +91,34 @@ describe("Containers on a server", () => {
     await user.click(await screen.findByRole("button", { name: "Containers" }));
     const dialog = await screen.findByRole("dialog", { name: "Containers" });
 
-    expect(await within(dialog).findByText("model “alpha” · asleep")).toBeInTheDocument();
+    const card = await within(dialog).findByRole("listitem", { name: "Container vllm-a" });
+    expect(within(card).getByText("alpha")).toBeInTheDocument();
+    expect(within(card).getByText("asleep")).toBeInTheDocument();
+    expect(within(dialog).getByRole("listitem", { name: "Container vllm-b" })).toHaveTextContent("Not registered as a model yet");
     expect(within(dialog).getByRole("meter", { name: "RAM" })).toBeInTheDocument();
     expect(within(dialog).getByRole("meter", { name: "GPU 0" })).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Stop vllm-a" }));
     await waitFor(() => { expect(calls.some((c) => c.key === "POST /api/servers/box/containers/vllm-a/stop")).toBe(true); });
     expect(await within(dialog).findByRole("button", { name: "Start vllm-a" })).toBeInTheDocument();
+  });
+
+  it("says why a model is down or still starting, right on its container", async () => {
+    base([server("box", { has_agent: true, agent_url: "https://a" })], {
+      "GET /api/servers/box/host": () => ({ body: host }),
+      "GET /api/servers/box/containers": (_, q) => ({
+        body: page([
+          container("vllm-a", { registered_as: "alpha", model_state: "starting", model_detail: "loading: Loading weights" }),
+          container("vllm-b", { running: false, state: "exited", exit_code: 1, registered_as: "beta", model_state: "down", model_detail: "The container stopped (exit code 1). Not enough free GPU memory: 15.82 of 22.03 GiB is free." }),
+        ], q),
+      }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Containers" }));
+    const dialog = await screen.findByRole("dialog", { name: "Containers" });
+    expect(await within(dialog).findByText("loading: Loading weights")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Not enough free GPU memory: 15\.82 of 22\.03 GiB is free/)).toBeInTheDocument();
   });
 
   it("shows the reason when a container cannot be stopped", async () => {

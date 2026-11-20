@@ -26,6 +26,7 @@ def _to_spec(row: ManagedModel) -> ModelSpec:
         idle_minutes=row.idle_minutes,
         priority=row.priority,
         backend_api_key=SecretStr(row.backend_api_key) if row.backend_api_key else None,
+        container=row.container_name,
     )
 
 
@@ -114,6 +115,7 @@ class ModelService:
             idle_minutes=body.idle_minutes,
             priority=body.priority,
             backend_api_key=body.backend_api_key,
+            container=body.container,
         )
         await _check_container_free(server, body.container, ignore=None)
         await self._manager.register(body.name, spec)  # validates names and probes the container
@@ -167,6 +169,7 @@ class ModelService:
         if spec.server != row.server.name and "container" not in body.model_fields_set:
             container = None  # the link was to a container on the old server
         await _check_container_free(server, container, ignore=name)
+        spec = spec.model_copy(update={"container": container})
         await self._manager.update(name, spec)
         row.server = server
         row.url = spec.url

@@ -75,6 +75,9 @@ class ModelSpec(BaseModel):
     backend_api_key: ApiKeyText | None = Field(
         None, description="the container's own API key, if it was started with one"
     )
+    container: str | None = Field(
+        None, max_length=64, description="the container that runs it, when the agent manages it"
+    )
 
     @property
     def gpu_slots(self) -> frozenset[tuple[str, int]]:

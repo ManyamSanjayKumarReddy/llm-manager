@@ -35,7 +35,7 @@ export function ManageModelDialog({ model, servers, onClose, onChanged }: Props)
   const [removeKey, setRemoveKey] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [busy, setBusy] = useState(false);
-  const idleNow = model.state === "asleep" || model.state === "down";
+  const idleNow = model.state === "asleep" || model.state === "down" || model.state === "starting";
   // The containers its server's agent manages, so the model can be linked to one of them.
   const agentHere = servers.find((s) => s.name === model.server)?.has_agent === true;
   const containers = useAsync(
@@ -93,6 +93,12 @@ export function ManageModelDialog({ model, servers, onClose, onChanged }: Props)
             </button>
           ) : null}
         </div>
+
+        {model.detail && (model.state === "down" || model.state === "starting") ? (
+          <p className={`model-note ${model.state}`} role="status">
+            <strong>{model.state === "starting" ? "Starting: " : "Why it is down: "}</strong>{model.detail}
+          </p>
+        ) : null}
 
         <FormSection title="Wake and sleep" hint="These can change at any time, even while the model is awake.">
           <PresetNumber label="Priority" options={PRIORITIES} value={priority} onChange={setPriority} min={0} max={100} />

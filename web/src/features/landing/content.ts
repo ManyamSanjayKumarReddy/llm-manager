@@ -3,8 +3,11 @@
 export const TICKER = [
   "Wake on demand",
   "One endpoint",
+  "One-command install",
+  "No open ports",
   "Shared GPUs",
   "Sleep when idle",
+  "Containers from the browser",
   "OpenAI compatible",
   "Priority models",
   "Zero idle VRAM",
@@ -13,22 +16,22 @@ export const TICKER = [
 export const STEPS = [
   {
     no: "01",
-    title: "Register your models",
-    text: "Point the dashboard at the vLLM containers you already run, or copy the ready-made command to start a new one with sleep mode on.",
+    title: "Connect a GPU server",
+    text: "Run one command on the machine. Its agent connects out to Wakeful, so there is no open port, certificate or firewall rule to set up.",
   },
   {
     no: "02",
-    title: "Call one endpoint",
-    text: "Programs use a single OpenAI-compatible address and an API key. Ask for any model by name; the right one is loaded for you.",
+    title: "Add your models",
+    text: "Create a vLLM container from the dashboard (the image downloads itself, sleep mode is already on), or register one you already run.",
   },
   {
     no: "03",
-    title: "Let them sleep",
-    text: "When nobody is asking, models move their weights to CPU memory and free the GPU. The next request wakes them in about a second.",
+    title: "Call one endpoint",
+    text: "Programs use a single OpenAI-compatible address and an API key. A sleeping model wakes in about a second, and idle ones go back to sleep on their own.",
   },
 ] as const;
 
-export type IconName = "bolt" | "layers" | "gauge" | "plug" | "key" | "chart" | "shield" | "sliders";
+export type IconName = "bolt" | "layers" | "gauge" | "plug" | "key" | "chart" | "shield" | "sliders" | "server" | "box" | "pulse";
 
 export const FEATURES: readonly { icon: IconName; title: string; text: string }[] = [
   {
@@ -40,6 +43,21 @@ export const FEATURES: readonly { icon: IconName; title: string; text: string }[
     icon: "layers",
     title: "Shared GPUs, no clashes",
     text: "Models that need the same GPU are never loaded together. The router drains one, sleeps it, then wakes the other.",
+  },
+  {
+    icon: "server",
+    title: "Any server, nothing exposed",
+    text: "Add as many GPU servers as you like. Each one is connected with a single command and dials out, so it can sit behind any firewall.",
+  },
+  {
+    icon: "box",
+    title: "Containers from the browser",
+    text: "Start, stop, restart, read the logs of and create vLLM containers on every server, and see its GPU, memory and disk, without logging in to it.",
+  },
+  {
+    icon: "pulse",
+    title: "Know why it is not ready",
+    text: "A model that is still loading says “starting”. One that failed says why in plain words, for example not enough free GPU memory, read from its log.",
   },
   {
     icon: "gauge",
@@ -66,17 +84,22 @@ export const FEATURES: readonly { icon: IconName; title: string; text: string }[
     title: "Secure by default",
     text: "No default account, hashed passwords, lockouts, per-request CSRF checks, a strict browser policy, and an audit trail.",
   },
-  {
-    icon: "sliders",
-    title: "Managed from the browser",
-    text: "Register, edit, sleep and remove models, and manage people and keys, without touching a config file.",
-  },
 ];
+
+export const CONNECT_STEPS = [
+  { title: "Add the server", text: "Give it a name and say how many GPUs it has. Press “Connect agent” and a one-time token is created." },
+  { title: "Paste one command", text: "Run it on the GPU machine. It needs Docker and the NVIDIA container toolkit, and nothing else." },
+  { title: "Watch it connect", text: "The dashboard shows the server as connected within seconds, with its GPUs, memory and disk." },
+] as const;
 
 export const FAQ = [
   {
     q: "Does it create or download models?",
-    a: "No. It manages vLLM containers that you start yourself. The dashboard shows the exact docker command to start one correctly, with sleep mode enabled, and then registers it. Nothing here controls Docker.",
+    a: "On a server with the Wakeful agent, yes: choose “Create and register” and Wakeful starts a vLLM container there (the vLLM image and the model files download on first use) and registers it. Without an agent it shows the exact docker command to start one yourself, with sleep mode enabled. The agent only manages containers it created.",
+  },
+  {
+    q: "Do I have to open a port on my GPU server?",
+    a: "No. The agent connects out to Wakeful over an encrypted WebSocket and keeps it open, so the server needs no open port, certificate or web-server rule. Wakeful sends its commands, and your programs' requests, back down that connection.",
   },
   {
     q: "How fast is a wake-up?",

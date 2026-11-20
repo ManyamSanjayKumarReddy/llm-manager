@@ -8,8 +8,8 @@ interface ModalProps {
   children: ReactNode;
   /** Read out by screen readers when the popup opens. */
   label: string;
-  /** "md" is a small popup a little wider, for commands to copy. "lg" is a wide popup with its own header, scrolling body and footer; on a phone it fills the screen. */
-  size?: "sm" | "md" | "lg";
+  /** "md" is a small popup a little wider, for commands to copy. "fit" is as wide as "lg" but only as tall as its content. "lg" is a wide popup with its own header, scrolling body and footer; on a phone it fills the screen. */
+  size?: "sm" | "md" | "lg" | "fit";
 }
 
 /** A native <dialog>: focus trap, Escape to close and a dimmed backdrop come for free. */
@@ -24,7 +24,7 @@ export function Modal({ open, onClose, children, label, size = "sm" }: ModalProp
   return (
     <dialog
       ref={ref}
-      className={size === "lg" ? "modal-lg" : size === "md" ? "modal-md" : undefined}
+      className={{ sm: undefined, md: "modal-md", lg: "modal-lg", fit: "modal-lg hug" }[size]}
       aria-label={label}
       onClose={onClose}
       onClick={(e) => { if (e.target === ref.current) onClose(); }}

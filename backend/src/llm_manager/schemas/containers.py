@@ -73,6 +73,9 @@ class ContainerOut(ResponseSchema):
     started_at: str | None
     registered_as: str | None = Field(description="the registered model that uses it")
     model_state: str | None = Field(description="that model's wake/sleep state")
+    model_detail: str | None = Field(
+        None, description="why that model is starting or down, when known"
+    )
 
 
 class LogsOut(ResponseSchema):

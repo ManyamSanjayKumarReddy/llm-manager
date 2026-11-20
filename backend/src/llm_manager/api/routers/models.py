@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query, Request, status
 from llm_manager.api.deps import AdminDep, ContainerDep, client_ip
 from llm_manager.api.pagination import PageDep
 from llm_manager.db.models import ManagedModel
-from llm_manager.engine import Manager
+from llm_manager.engine import Manager, State
 from llm_manager.schemas.models import (
     ModelCheck,
     ModelCheckRequest,
@@ -33,7 +33,8 @@ def _out(row: ManagedModel, manager: Manager) -> ModelOut:
         has_api_key=bool(row.backend_api_key),
         container=row.container_name,
         created_at=row.created_at,
-        state=runtime.state.value if runtime else "unknown",
+        state=runtime.shown_state if runtime else "unknown",
+        detail=runtime.detail if runtime and runtime.state is State.DOWN else None,
         inflight=runtime.inflight if runtime else 0,
         waiting=runtime.waiting if runtime else 0,
     )

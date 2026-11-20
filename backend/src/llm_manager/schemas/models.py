@@ -61,6 +61,7 @@ class ModelOut(ResponseSchema):
     container: str | None = Field(description="the container that runs it, if linked")
     created_at: datetime
     state: str
+    detail: str | None = Field(None, description="why it is starting or down, if known")
     inflight: int
     waiting: int
 

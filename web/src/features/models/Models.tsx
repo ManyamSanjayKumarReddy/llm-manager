@@ -107,7 +107,10 @@ function Row({ model: m, onOpen }: { model: ManagedModel; onOpen: () => void }) 
           <span className="dim mono small-text">{m.served_name ?? m.url}{m.has_api_key ? " · key stored" : ""}</span>
         </button>
       </td>
-      <td data-label="State"><Pill>{m.state}</Pill></td>
+      <td data-label="State">
+        <Pill>{m.state}</Pill>
+        {m.detail && (m.state === "down" || m.state === "starting") ? <span className={`model-note ${m.state}`}>{m.detail}</span> : null}
+      </td>
       <td data-label="Server · GPUs"><span className="dim">{m.server}</span> {m.gpus.map((g) => <span key={g} className="gpu-chip">GPU {g}</span>)}</td>
       <td data-label="Priority" className="num">{m.priority === 0 ? <span className="dim">Normal</span> : <span className="prio">{m.priority}</span>}</td>
       <td data-label="Sleeps after" className="num dim">{m.idle_minutes} min</td>

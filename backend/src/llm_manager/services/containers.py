@@ -10,20 +10,43 @@ The rules that keep the scheduler and the containers consistent:
   so explicitly (the dashboard asks the admin to confirm).
 """
 
+import logging
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 
-from llm_manager.core.errors import InvalidInputError
+from llm_manager.core.errors import DomainError, InvalidInputError, NotFoundError
+from llm_manager.core.models_config import ModelSpec
 from llm_manager.db.models import ManagedModel, Server
-from llm_manager.engine import Manager
+from llm_manager.engine import Diagnosis, Manager, State
 from llm_manager.schemas.containers import ContainerCreate, ContainerOut, HostOut, LogsOut
 from llm_manager.schemas.models import ModelCreate
 from llm_manager.services.agents import AgentClient
 from llm_manager.services.audit import AuditService
+from llm_manager.services.logreason import failure_reason, last_line
 from llm_manager.services.models import ModelService
 from llm_manager.services.servers import ServerService
+
+log = logging.getLogger(__name__)
+
+_LOG_LINES = 120
+_STARTING_LIMIT_S = 30 * 60  # loading a big model can take long, but not forever
+_GONE_STATES = {"exited", "dead", "created", "removing"}
+
+
+def _seconds_since(stamp: str | None) -> float | None:
+    """How long ago an agent timestamp (docker's RFC 3339, up to nanoseconds) was."""
+    if not stamp:
+        return None
+    try:
+        then = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - then).total_seconds()
 
 
 def _url_port(url: str) -> int | None:
@@ -72,8 +95,69 @@ class ContainerService:
         return ContainerOut(
             **raw,
             registered_as=model.name if model else None,
-            model_state=runtime.state.value if runtime else None,
+            model_state=runtime.shown_state if runtime else None,
+            model_detail=runtime.detail if runtime and runtime.state is State.DOWN else None,
         )
+
+    async def diagnose(self, spec: ModelSpec) -> Diagnosis | None:
+        """Why a model's container does not answer: still loading, or not working (and why).
+
+        Needs the container linked to the model and an agent on its server; otherwise there is
+        nothing to add to "down".
+        """
+        if spec.container is None:
+            return None
+        try:
+            _, agent = await self._agent(spec.server)
+            info: dict[str, Any] = await agent.call("GET", f"/containers/{spec.container}")
+        except NotFoundError:
+            return Diagnosis(
+                starting=False,
+                detail=f"the container '{spec.container}' no longer exists on {spec.server}",
+            )
+        except DomainError:
+            return None  # the agent cannot be reached: it cannot be asked
+        state = str(info.get("state", ""))
+        text = ""
+        try:
+            tail = await agent.call(
+                "GET", f"/containers/{spec.container}/logs", params={"tail": _LOG_LINES}
+            )
+            text = str(tail.get("text", "")) if tail else ""
+        except DomainError:
+            pass
+        running = state == "running"
+        reason = failure_reason(text, fallback=not running)
+        if info.get("oom_killed"):
+            return Diagnosis(
+                starting=False,
+                detail="The container was killed for using more memory than its limit: raise "
+                "the container's memory limit.",
+            )
+        if state in _GONE_STATES or state == "restarting":
+            code = info.get("exit_code")
+            if state == "created":
+                lead = "The container was created but never started"
+            elif state == "restarting":
+                lead = "The container keeps crashing and restarting"
+            else:
+                lead = "The container stopped" + (
+                    f" (exit code {code})" if code is not None else ""
+                )
+            return Diagnosis(starting=False, detail=f"{lead}. {reason}" if reason else f"{lead}.")
+        if state == "running":
+            if reason:  # still "running" but vLLM already reported why it cannot work
+                return Diagnosis(starting=False, detail=reason)
+            age = _seconds_since(info.get("started_at"))
+            line = last_line(text)
+            if age is not None and age > _STARTING_LIMIT_S:
+                return Diagnosis(
+                    starting=False,
+                    detail="The container is running but vLLM does not answer"
+                    + (f". Last log line: {line}" if line else ""),
+                )
+            return Diagnosis(starting=True, detail=f"loading: {line}" if line else "loading")
+        return None
 
     async def list(self, server_name: str) -> list[ContainerOut]:
         """Every container the agent manages, with the model registered for each."""

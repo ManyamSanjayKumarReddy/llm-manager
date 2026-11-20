@@ -1,6 +1,7 @@
 """Controlling containers through a server's agent, and keeping the scheduler in step."""
 
 import asyncio
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import FastAPI
@@ -457,3 +458,106 @@ async def test_linking_beats_guessing_by_port(make_stack: StackFactory) -> None:
         for c in (await client.get("/api/servers/this-server/containers")).json()["items"]
     }
     assert by_name["vllm-c"]["registered_as"] == "b"
+
+
+async def test_a_container_that_is_still_loading_shows_as_starting(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    client = await admin(stack)
+    agent = await with_agent(stack, client)
+    await client.patch("/api/models/b", json={"container": "vllm-b"})
+    agent.log_text = "(APIServer pid=1) INFO 11-20 05:17:30 [loader.py:1] Loading weights\n"
+    agent.containers["vllm-b"]["started_at"] = datetime.now(UTC).isoformat()  # just started
+    stack.dispatch.down.add(PORTS["b"])  # vLLM is not answering yet, the container is running
+
+    await stack.container.manager.refresh("b")
+
+    runtime = stack.container.manager.models["b"]
+    assert runtime.shown_state == "starting"
+    assert runtime.detail == "loading: Loading weights"
+    listed = {m["name"]: m for m in (await client.get("/api/models")).json()["items"]}
+    assert listed["b"]["state"] == "starting"
+    assert listed["b"]["detail"] == "loading: Loading weights"
+    assert (await client.get("/api/status")).json()["models"]["b"]["state"] == "starting"
+
+    stack.dispatch.down.discard(PORTS["b"])  # it finished loading
+    await stack.container.manager.refresh("b")
+    assert stack.container.manager.models["b"].shown_state in {"asleep", "sleeping"}
+    assert stack.container.manager.models["b"].detail is None
+
+
+async def test_a_container_that_stopped_says_why_it_is_down(make_stack: StackFactory) -> None:
+    stack = await make_stack()
+    client = await admin(stack)
+    agent = await with_agent(stack, client)
+    await client.patch("/api/models/b", json={"container": "vllm-b"})
+    agent.log_text = (
+        "ValueError: Free memory on device (15.82/22.03 GiB) on startup is less than desired GPU "
+        "memory utilization (0.9, 19.83 GiB).\n"
+    )
+    assert (await client.post("/api/servers/this-server/containers/vllm-b/stop")).status_code == 200
+
+    runtime = stack.container.manager.models["b"]
+    assert runtime.shown_state == "down"
+    assert runtime.detail is not None
+    assert runtime.detail.startswith("The container stopped (exit code 0). Not enough free GPU")
+    status = (await client.get("/api/status")).json()["models"]["b"]
+    assert status["state"] == "down"
+    assert "Not enough free GPU memory" in status["detail"]
+
+
+async def test_a_request_for_a_starting_model_says_it_is_loading(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    client = await admin(stack)
+    agent = await with_agent(stack, client)
+    await client.patch("/api/models/b", json={"container": "vllm-b"})
+    agent.log_text = "Loading weights\n"
+    agent.containers["vllm-b"]["started_at"] = datetime.now(UTC).isoformat()
+    stack.dispatch.down.add(PORTS["b"])
+    await stack.container.manager.refresh("b")
+
+    key = await stack.api_key()
+    answer = await stack.chat(key, "b")
+    assert answer.status_code == 503
+    assert "still starting: loading: Loading weights" in answer.text
+
+
+async def test_a_model_without_an_agent_is_just_down(make_stack: StackFactory) -> None:
+    stack = await make_stack()
+    await admin(stack)
+    stack.dispatch.down.add(PORTS["b"])
+    await stack.container.manager.refresh("b")
+    runtime = stack.container.manager.models["b"]
+    assert runtime.shown_state == "down"
+    assert runtime.detail is None
+
+
+async def test_a_container_running_far_too_long_without_answering_is_down(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    client = await admin(stack)
+    agent = await with_agent(stack, client)
+    await client.patch("/api/models/b", json={"container": "vllm-b"})
+    agent.log_text = "Loading weights\n"  # started 3 days ago (the fake's default)
+    stack.dispatch.down.add(PORTS["b"])
+    await stack.container.manager.refresh("b")
+    runtime = stack.container.manager.models["b"]
+    assert runtime.shown_state == "down"
+    assert runtime.detail == (
+        "The container is running but vLLM does not answer. Last log line: Loading weights"
+    )
+
+
+async def test_the_status_groups_gpus_and_models_by_server(make_stack: StackFactory) -> None:
+    stack = await make_stack()
+    client = await admin(stack)
+    status = (await client.get("/api/status")).json()
+    assert {m["server"] for m in status["models"].values()} == {"this-server"}
+    [server] = status["servers"]
+    assert server["name"] == "this-server"
+    assert [g["gpu"] for g in server["gpus"]] == sorted(g["gpu"] for g in server["gpus"])
+    assert all(set(g) == {"gpu", "model", "state"} for g in server["gpus"])

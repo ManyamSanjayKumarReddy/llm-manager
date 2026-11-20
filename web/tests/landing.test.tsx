@@ -37,11 +37,11 @@ describe("landing page", () => {
     mockApi({ "GET /api/auth/me": notLoggedIn });
     render(<App />);
     await screen.findByRole("heading", { level: 1 });
-    for (const heading of [/hostage/, /Three steps/, /Everything around the wake-up/, /important one goes first/, /Same API/, /Straight answers/, /Give your GPUs a rest/]) {
+    for (const heading of [/hostage/, /Three steps/, /One command connects a GPU server/, /Everything around the wake-up/, /important one goes first/, /Same API/, /Straight answers/, /Give your GPUs a rest/]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
     const nav = screen.getByRole("navigation", { name: "Page sections" });
-    const targets = [["How it works", "#how"], ["Features", "#features"], ["Priority", "#priority"], ["FAQ", "#faq"]] as const;
+    const targets = [["How it works", "#how"], ["Connect", "#connect"], ["Features", "#features"], ["Priority", "#priority"], ["FAQ", "#faq"]] as const;
     for (const [label, target] of targets) {
       expect(within(nav).getByRole("link", { name: label })).toHaveAttribute("href", target);
       expect(document.querySelector(target)).not.toBeNull(); // the link points at a real section
@@ -60,7 +60,14 @@ describe("landing page", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByText("Does it create or download models?"));
-    expect(screen.getByText(/Nothing here controls Docker/)).toBeVisible();
+    expect(screen.getByText(/The agent only manages containers it created/)).toBeVisible();
+  });
+
+  it("shows the one-line install command with the page's own address", async () => {
+    mockApi({ "GET /api/auth/me": notLoggedIn });
+    render(<App />);
+    expect(await screen.findByLabelText("Install command")).toHaveTextContent(`curl -fsSL ${window.location.origin}/install-agent.sh | sudo bash -s -- wkt_`);
+    expect(screen.getByText("Do I have to open a port on my GPU server?")).toBeInTheDocument();
   });
 
   it("shows a code sample that points at the page's own address", async () => {

@@ -40,6 +40,7 @@ dialog.modal-md { width: min(600px, calc(100vw - 32px)); }
 /* One fixed size for every step, so the popup never jumps; the middle part scrolls. */
 dialog.modal-lg { width: min(780px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 40px)); }
 dialog.modal-lg[open] { display: flex; flex-direction: column; }
+dialog.modal-lg.hug { height: auto; max-height: min(800px, calc(100dvh - 40px)); }
 dialog.modal-lg > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; }
 .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 24px 0; flex: none; }
 .modal-head h2 { font-size: 24px; }

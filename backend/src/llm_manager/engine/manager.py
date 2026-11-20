@@ -27,7 +27,7 @@ import contextlib
 import logging
 import time
 from collections import deque
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
@@ -40,8 +40,15 @@ from llm_manager.core.errors import (
 )
 from llm_manager.core.models_config import EngineConfig, ModelSpec
 from llm_manager.engine.backend import BackendError, VllmBackend
-from llm_manager.engine.states import HOLDS_GPU, ModelRuntime, State
-from llm_manager.schemas.status import EventOut, GpuHolder, ModelStatus, StatusOut
+from llm_manager.engine.states import HOLDS_GPU, Diagnosis, ModelRuntime, State
+from llm_manager.schemas.status import (
+    EventOut,
+    GpuHolder,
+    ModelStatus,
+    ServerGpu,
+    ServerStatus,
+    StatusOut,
+)
 
 log = logging.getLogger(__name__)
 
@@ -55,10 +62,21 @@ _DOWN_RETRIES = 2  # a failed check is repeated this many times before the model
 _DOWN_RETRY_GAP_S = 1.0  # ... this far apart (a loaded server can miss one answer)
 _REPROBE_GAP_S = 1.0  # a request for a DOWN model asks whether it is back, at most this often
 _MIN_REPORTED_WAIT_S = 0.05  # shorter waits are not counted as "had to wait"
+_EXPLAIN_LIMIT_S = 8.0  # asking the server's agent why a container is silent may take this long
 _EVENT_HISTORY = 200
 _RETRY_AFTER_QUEUE_S = 10
 _RETRY_AFTER_DOWN_S = 10
 _RETRY_AFTER_FAILED_SWAP_S = 15
+
+
+def _down_message(model: ModelRuntime) -> str:
+    if model.starting:
+        return f"model {model.name} is still starting: {model.detail or 'the container is loading'}"
+    return f"model {model.name} backend is down" + (f": {model.detail}" if model.detail else "")
+
+
+def _down_detail(model: ModelRuntime) -> str:
+    return model.detail or "container stopped or unreachable"
 
 
 def _is_down(model: ModelRuntime) -> bool:
@@ -99,6 +117,8 @@ class Manager:
         self.started_at = time.time()
         self.events: deque[EventOut] = deque(maxlen=_EVENT_HISTORY)  # newest last
         self.event_sink: Callable[[EventOut], None] | None = None  # persists events
+        # Asks the server's agent why a container does not answer (set by the application).
+        self.diagnose: Callable[[ModelSpec], Awaitable[Diagnosis | None]] | None = None
 
     # ------------------------------------------------------------------ helpers
     def resolve(self, name: str) -> ModelRuntime:
@@ -153,14 +173,29 @@ class Manager:
             self._cond.notify_all()
 
     # -------------------------------------------------------------- transitions
-    async def _probe(self, model: ModelRuntime) -> State:
-        """Ask the container what state it is really in."""
+    async def _probe(self, model: ModelRuntime, *, explain: bool = True) -> State:
+        """Ask the container what state it is really in (and, if it is silent, why)."""
         try:
             asleep = await self._backend.is_sleeping(model.spec)
         except BackendError as exc:
             log.warning("model %s unreachable: %s", model.name, exc)
+            if explain:
+                await self._explain(model)
             return State.DOWN
+        model.starting = False
+        model.detail = None
         return State.ASLEEP if asleep else State.AWAKE
+
+    async def _explain(self, model: ModelRuntime) -> None:
+        """Ask the server's agent whether the silent container is loading or has failed."""
+        diagnosis: Diagnosis | None = None
+        if self.diagnose is not None and model.spec.container is not None:
+            try:
+                diagnosis = await asyncio.wait_for(self.diagnose(model.spec), _EXPLAIN_LIMIT_S)
+            except Exception as exc:  # noqa: BLE001 - a courtesy: never let it break a probe
+                log.debug("could not explain why %s is silent: %r", model.name, exc)
+        model.starting = diagnosis.starting if diagnosis else False
+        model.detail = diagnosis.detail if diagnosis else None
 
     async def _go_to_sleep(self, model: ModelRuntime, reason: str) -> bool:
         """Sleep a model already marked SLEEPING. Returns True if it is now asleep."""
@@ -255,7 +290,7 @@ class Manager:
         if self._starting:
             return _Verdict.WAIT  # states are not known yet; DOWN would be a guess
         if model.state is State.DOWN:
-            raise UnavailableError(f"model {model.name} backend is down", _RETRY_AFTER_DOWN_S)
+            raise UnavailableError(_down_message(model), _RETRY_AFTER_DOWN_S)
         if model.state is State.AWAKE:
             for other in self._competitors(model):
                 if other.spec.priority > model.spec.priority:
@@ -474,7 +509,8 @@ class Manager:
             await self._go_to_sleep(model, "registered")
         else:
             await self._set_state(model, state)
-        self._event(model, "registered", f"{state.value} on {spec.server} GPU {sorted(spec.gpus)}")
+        shown = model.shown_state
+        self._event(model, "registered", f"{shown} on {spec.server} GPU {sorted(spec.gpus)}")
         return model
 
     async def update(self, name: str, spec: ModelSpec) -> ModelRuntime:
@@ -551,7 +587,7 @@ class Manager:
                 return  # in motion: its own transition will settle it
             if found is State.DOWN and model.state is not State.DOWN:
                 model.state = State.DOWN
-                self._event(model, "went_down", "container stopped or unreachable")
+                self._event(model, "went_down", _down_detail(model))
             elif found is not State.DOWN and model.state is State.DOWN:
                 model.state = State.SLEEPING if found is State.AWAKE else State.ASLEEP
                 sleep_it = found is State.AWAKE
@@ -585,7 +621,7 @@ class Manager:
         self._starting = True
         try:
             for model in list(self.models.values()):
-                model.state = await self._probe(model)
+                model.state = await self._probe(model, explain=False)  # agents may not be here yet
             for model in list(self.models.values()):
                 if model.state is State.AWAKE:
                     async with self._cond:
@@ -671,7 +707,7 @@ class Manager:
             else:
                 model.state = State.SLEEPING
         if found is State.DOWN:
-            self._event(model, "went_down", "container stopped or unreachable")
+            self._event(model, "went_down", _down_detail(model))
             log.warning("model %s is no longer reachable", model.name)
         else:
             self._event(model, "back_online", "awake")
@@ -700,7 +736,9 @@ class Manager:
             idle = now - m.last_used
             counting_down = m.state is State.AWAKE and m.inflight == 0
             out[name] = ModelStatus(
-                state=m.state.value,
+                server=m.spec.server,
+                state=m.shown_state,
+                detail=m.detail if m.state is State.DOWN else None,
                 priority=m.spec.priority,
                 gpus=sorted(m.spec.gpus),
                 inflight=m.inflight,
@@ -740,9 +778,27 @@ class Manager:
             server, number = slot
             key = f"{server} · GPU {number}" if several_servers else str(number)
             gpus[key] = GpuHolder(model=holder.name, state=holder.state.value) if holder else None
+        grouped: dict[str, list[ServerGpu]] = {}
+        for server, number in slots:
+            holder = next(
+                (
+                    m
+                    for m in self.models.values()
+                    if (server, number) in m.spec.gpu_slots and m.state in HOLDS_GPU
+                ),
+                None,
+            )
+            grouped.setdefault(server, []).append(
+                ServerGpu(
+                    gpu=number,
+                    model=holder.name if holder else None,
+                    state=holder.shown_state if holder else None,
+                )
+            )
         return StatusOut(
             uptime_s=round(time.time() - self.started_at),
             models=self.status(),
             gpus=gpus,
+            servers=[ServerStatus(name=n, gpus=g) for n, g in sorted(grouped.items())],
             events=list(self.events)[-event_limit:][::-1],  # newest first
         )

@@ -25,12 +25,38 @@ export function Overview() {
   );
 }
 
+const NO_SERVER = "this-server";
+
+/** The models of one server and the GPUs they may use, in the order the servers were first seen. */
+interface Group {
+  name: string;
+  models: [string, ModelStatus][];
+  gpus: { gpu: number; model: string | null; state: string | null }[];
+}
+
+function groupByServer(data: StatusData): Group[] {
+  const groups = new Map<string, Group>();
+  const of = (name: string) => {
+    let group = groups.get(name);
+    if (!group) {
+      group = { name, models: [], gpus: [] };
+      groups.set(name, group);
+    }
+    return group;
+  };
+  for (const entry of Object.entries(data.models)) of(entry[1].server ?? NO_SERVER).models.push(entry);
+  for (const server of data.servers ?? []) of(server.name).gpus = server.gpus;
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function Content({ data }: { data: StatusData }) {
   const models = Object.entries(data.models);
+  const groups = groupByServer(data);
   const awake = models.filter(([, m]) => m.state === "awake").length;
   const requests = models.reduce((sum, [, m]) => sum + m.requests, 0);
-  const gpuIds = Object.keys(data.gpus);
-  const gpusBusy = gpuIds.filter((id) => data.gpus[id]).length;
+  // GPUs are counted per server when the router says so, else from the flat list.
+  const gpuTotal = data.servers ? groups.reduce((n, g) => n + g.gpus.length, 0) : Object.keys(data.gpus).length;
+  const gpusBusy = data.servers ? groups.reduce((n, g) => n + g.gpus.filter((x) => x.model !== null).length, 0) : Object.values(data.gpus).filter(Boolean).length;
   const wakes = models.filter(([, m]) => m.avg_wake_s != null);
   const avgWake = wakes.length ? wakes.reduce((s, [, m]) => s + (m.avg_wake_s ?? 0), 0) / wakes.length : null;
 
@@ -39,15 +65,15 @@ function Content({ data }: { data: StatusData }) {
       <Reveal>
         <div className="stats">
           <Stat label="Models awake" value={<><CountUp value={awake} />/{models.length}</>} />
-          <Stat label="GPUs in use" value={<><CountUp value={gpusBusy} />/{gpuIds.length}</>} />
+          <Stat label="GPUs in use" value={<><CountUp value={gpusBusy} />/{gpuTotal}</>} />
           <Stat label="Requests since start" value={<CountUp value={requests} />} />
           <Stat label="Average wake" value={avgWake == null ? "–" : seconds(avgWake)} />
         </div>
       </Reveal>
 
       <div className="section-title">
-        <h2>Your models</h2>
-        <span className="count">{models.length} configured · router up {seconds(data.uptime_s)}</span>
+        <h2>Your servers</h2>
+        <span className="count">{groups.length} {groups.length === 1 ? "server" : "servers"} · {models.length} models · router up {seconds(data.uptime_s)}</span>
       </div>
       {models.length === 0 ? (
         <Empty
@@ -58,34 +84,12 @@ function Content({ data }: { data: StatusData }) {
           Register the vLLM containers you run, and they appear here.
         </Empty>
       ) : (
-        <div className="models">
-          {models.map(([name, model], i) => (
-            <Reveal key={name} delay={i * 70}>
-              <ModelCard name={name} model={model} />
-            </Reveal>
-          ))}
-        </div>
+        groups.map((group, i) => (
+          <Reveal key={group.name} delay={i * 70}>
+            <ServerGroup group={group} />
+          </Reveal>
+        ))
       )}
-
-      {gpuIds.length > 0 ? (
-        <Reveal>
-          <section className="surface stack">
-            <div className="section-title">
-              <h2>GPUs</h2>
-              <span className="count">who holds each one</span>
-            </div>
-            <div className="gpus">
-              {Object.entries(data.gpus).map(([id, holder]) => (
-                <div key={id} className={`gpu ${holder ? "used" : ""}`}>
-                  <b>{/^\d+$/.test(id) ? `GPU ${id}` : id}</b>
-                  <span>{holder ? holder.model : "Free"}</span>
-                  {holder ? <Pill>{holder.state}</Pill> : null}
-                </div>
-              ))}
-            </div>
-          </section>
-        </Reveal>
-      ) : null}
 
       <Reveal>
         <section className="surface stack">
@@ -116,6 +120,37 @@ function Content({ data }: { data: StatusData }) {
   );
 }
 
+/** One server: its GPUs on top (who holds each), then its models. */
+function ServerGroup({ group }: { group: Group }) {
+  const used = group.gpus.filter((g) => g.model !== null).length;
+  return (
+    <section className="surface server-group" aria-label={`Server ${group.name}`}>
+      <div className="server-head">
+        <div>
+          <h2>{group.name}</h2>
+          <p className="server-meta">
+            {group.models.length} {group.models.length === 1 ? "model" : "models"}
+            {group.gpus.length > 0 ? ` · ${used}/${group.gpus.length} GPUs in use` : ""}
+          </p>
+        </div>
+        {group.gpus.length > 0 ? (
+          <div className="gpu-strip" aria-label={`GPUs on ${group.name}`}>
+            {group.gpus.map((g) => (
+              <span key={g.gpu} className={`gpu-cell ${g.model ? (g.state === "awake" ? "used" : "warm") : ""}`}>
+                <b>GPU {g.gpu}</b>
+                {g.model ? <><span>{g.model}</span><Pill>{g.state ?? "awake"}</Pill></> : <span>free</span>}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="models in-group">
+        {group.models.map(([name, model]) => <ModelCard key={name} name={name} model={model} />)}
+      </div>
+    </section>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="surface stat">
@@ -142,6 +177,9 @@ function ModelCard({ name, model }: { name: string; model: ModelStatus }) {
         </div>
         <Pill>{model.state}</Pill>
       </div>
+      {model.detail && (model.state === "down" || model.state === "starting") ? (
+        <p className={`model-note ${model.state}`} role="status">{model.detail}</p>
+      ) : null}
       <dl className="facts">
         <div><dt>In flight</dt><dd>{model.inflight}</dd></div>
         <div><dt>Waiting</dt><dd>{model.waiting}</dd></div>
