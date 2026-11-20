@@ -85,7 +85,7 @@ connects. The agent reconnects by itself after any interruption.
   automatically.
 * *New token* disconnects the agent that uses the old one; *Disconnect* cuts the server off.
 * Wakeful's own web server must pass WebSockets on `/api/agent/connect`: see
-  `deploy/apache-wakeful-connect.conf.example`. Run Wakeful as a single process (the connections
+  `deploy/nginx-wakeful-connect.conf.example` (or `deploy/apache-wakeful-connect.conf.example`). Run Wakeful as a single process (the connections
   live in its memory).
 * The wire format is in [PROTOCOL.md](PROTOCOL.md).
 

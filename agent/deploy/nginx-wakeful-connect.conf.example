@@ -1,0 +1,15 @@
+# On the machine that runs Wakeful, inside its TLS `server { ... }` block, next to the existing
+# `location / { proxy_pass http://127.0.0.1:8040; ... }`. Agents connect out to this path with a
+# WebSocket, which nginx only forwards if it is told to upgrade the connection.
+# Keep the same proxy_set_header lines (Host, X-Real-IP, ...) your main location already has.
+location /api/agent/connect {
+    proxy_pass http://127.0.0.1:8040;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    # The connection stays open for days; the agent pings it every 20 s.
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
