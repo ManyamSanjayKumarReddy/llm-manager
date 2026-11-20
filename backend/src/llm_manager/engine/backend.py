@@ -7,6 +7,7 @@ import time
 import httpx
 
 from llm_manager.core.models_config import ModelSpec
+from llm_manager.core.routing import for_server
 
 _PROBE_TIMEOUT_S = 5.0
 _POLL_S = 0.5  # how often the token counters are read while waiting for a quiet engine
@@ -67,6 +68,7 @@ class VllmBackend:
                 params=params,
                 headers=self._headers(spec),
                 timeout=timeout_s,
+                extensions=for_server(spec.server),
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:

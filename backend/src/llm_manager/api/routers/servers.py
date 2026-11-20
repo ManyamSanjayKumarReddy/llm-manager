@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request, status
 
 from llm_manager.api.deps import AdminDep, ContainerDep, client_ip
-from llm_manager.schemas.servers import ServerCreate, ServerOut, ServerUpdate
+from llm_manager.schemas.servers import ServerCreate, ServerOut, ServerUpdate, TunnelEnrolled
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
 
@@ -40,3 +40,23 @@ async def remove_server(
 ) -> None:
     """Delete a server that has no models."""
     await container.servers.remove(name, actor=admin.username, ip=client_ip(request, container))
+
+
+@router.post("/{name}/tunnel", status_code=status.HTTP_201_CREATED)
+async def enroll_tunnel(
+    name: str, request: Request, admin: AdminDep, container: ContainerDep
+) -> TunnelEnrolled:
+    """Issue the token a server's agent uses to connect out (shown once; replaces any earlier)."""
+    return await container.servers.enroll_tunnel(
+        name, actor=admin.username, ip=client_ip(request, container)
+    )
+
+
+@router.delete("/{name}/tunnel")
+async def revoke_tunnel(
+    name: str, request: Request, admin: AdminDep, container: ContainerDep
+) -> ServerOut:
+    """Stop accepting the server's agent and close its connection."""
+    return await container.servers.revoke_tunnel(
+        name, actor=admin.username, ip=client_ip(request, container)
+    )

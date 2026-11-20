@@ -9,6 +9,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { Link } from "../../router/Link";
 import { useToast } from "../toast/context";
 import { AgentDialog } from "./AgentDialog";
+import { ConnectDialog } from "./ConnectDialog";
 import { ContainersDialog } from "./ContainersDialog";
 import { hostSummary } from "./hostSummary";
 
@@ -32,8 +33,10 @@ export function Servers() {
 
   const items = servers.data ?? [];
   const [agentFor, setAgentFor] = useState<string>();
+  const [connectFor, setConnectFor] = useState<string>();
   const [containersFor, setContainersFor] = useState<string>();
   const agentServer = items.find((s) => s.name === agentFor);
+  const connectServer = items.find((s) => s.name === connectFor);
   const containerServer = items.find((s) => s.name === containersFor);
   return (
     <div className="page">
@@ -55,6 +58,7 @@ export function Servers() {
                     key={`${server.name}-${server.gpu_count}-${server.gpu_type ?? ""}`}
                     server={server}
                     onAgent={() => { setAgentFor(server.name); }}
+                    onConnect={() => { setConnectFor(server.name); }}
                     onContainers={() => { setContainersFor(server.name); }}
                     onChange={(changes) => act(() => api.updateServer(server.name, changes), `${server.name} updated.`)}
                     onRemove={() => act(() => api.removeServer(server.name), `${server.name} removed.`)}
@@ -70,6 +74,9 @@ export function Servers() {
       <Modal open={agentServer !== undefined} onClose={() => { setAgentFor(undefined); }} label="Agent settings">
         {agentServer ? <AgentDialog server={agentServer} onClose={() => { setAgentFor(undefined); }} onChanged={() => { setAgentFor(undefined); void servers.reload(); }} /> : null}
       </Modal>
+      <Modal open={connectServer !== undefined} onClose={() => { setConnectFor(undefined); }} label="Connect agent">
+        {connectServer ? <ConnectDialog server={connectServer} onClose={() => { setConnectFor(undefined); }} onChanged={() => { void servers.reload(); }} /> : null}
+      </Modal>
       <Modal open={containerServer !== undefined} onClose={() => { setContainersFor(undefined); }} label="Containers" size="lg">
         {containerServer ? <ContainersDialog server={containerServer} onClose={() => { setContainersFor(undefined); }} onChanged={() => { void servers.reload(); }} /> : null}
       </Modal>
@@ -78,14 +85,15 @@ export function Servers() {
 }
 
 /** One line about the machine's load, refreshed now and then. Says so when the agent cannot be reached. */
-function AgentStatus({ server }: { server: string }) {
-  const host = useAsync(() => api.hostStats(server), 15000);
+function AgentStatus({ server, waiting }: { server: string; waiting: boolean }) {
+  const host = useAsync(() => (waiting ? Promise.reject(new Error("not connected")) : api.hostStats(server)), 15000);
+  if (waiting) return <span className="dim small-text">Not connected</span>;
   if (host.error) return <span className="dim small-text">Agent not reachable</span>;
   if (!host.data) return <span className="dim small-text">Checking…</span>;
   return <span className="dim small-text">{hostSummary(host.data)}</span>;
 }
 
-function ServerRow({ server, onChange, onRemove, onAgent, onContainers }: { server: Server; onChange: (changes: { gpu_count?: number; gpu_type?: string }) => Promise<boolean>; onRemove: () => Promise<boolean>; onAgent: () => void; onContainers: () => void }) {
+function ServerRow({ server, onChange, onRemove, onAgent, onConnect, onContainers }: { server: Server; onChange: (changes: { gpu_count?: number; gpu_type?: string }) => Promise<boolean>; onRemove: () => Promise<boolean>; onAgent: () => void; onConnect: () => void; onContainers: () => void }) {
   const [count, setCount] = useState(String(server.gpu_count));
   const [type, setType] = useState(server.gpu_type ?? "");
   const [confirming, setConfirming] = useState(false);
@@ -108,14 +116,17 @@ function ServerRow({ server, onChange, onRemove, onAgent, onContainers }: { serv
       <td data-label="Agent">
         {server.has_agent ? (
           <div className="agent-cell">
-            <AgentStatus server={server.name} />
+            <AgentStatus key={String(server.tunnel_connected)} server={server.name} waiting={server.tunnel && !server.tunnel_connected} />
             <div className="actions-cell">
-              <button className="btn small" type="button" onClick={onContainers}>Containers</button>
-              <button className="btn small" type="button" onClick={onAgent}>Settings</button>
+              <button className="btn small" type="button" disabled={server.tunnel && !server.tunnel_connected} onClick={onContainers}>Containers</button>
+              <button className="btn small" type="button" onClick={server.tunnel ? onConnect : onAgent}>Settings</button>
             </div>
           </div>
         ) : (
-          <button className="btn small" type="button" onClick={onAgent}>Set up agent</button>
+          <div className="actions-cell">
+            <button className="btn small" type="button" onClick={onConnect}>Connect agent</button>
+            <button className="btn small" type="button" onClick={onAgent}>Use an address</button>
+          </div>
         )}
       </td>
       <td data-label="">

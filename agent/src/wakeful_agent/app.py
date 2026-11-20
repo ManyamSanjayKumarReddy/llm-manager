@@ -1,8 +1,10 @@
 """The agent's HTTP interface. Everything except ``/healthz`` needs the bearer token."""
 
 import asyncio
+import contextlib
 import hmac
 import logging
+from collections.abc import AsyncIterator
 from typing import Annotated, Protocol
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
@@ -15,6 +17,7 @@ from wakeful_agent.errors import AgentError, NotFoundError
 from wakeful_agent.schemas import ContainerOut, HealthOut, HostOut, LogsOut
 from wakeful_agent.settings import Settings
 from wakeful_agent.spec import ContainerSpec, build_run
+from wakeful_agent.tunnel import Tunnel
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +34,28 @@ class Host(Protocol):
 
 def create_app(settings: Settings, docker: Docker, host: Host) -> FastAPI:
     """The agent, wired to a Docker and a host reader."""
-    app = FastAPI(title="Wakeful agent", version=__version__, docs_url=None, redoc_url=None)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # With AGENT_CONNECT_URL the agent also dials out to Wakeful for as long as it runs.
+        if not settings.connect_url:
+            yield
+            return
+        task = asyncio.create_task(Tunnel(settings, app, docker).run(), name="tunnel")
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    app = FastAPI(
+        title="Wakeful agent",
+        version=__version__,
+        docs_url=None,
+        redoc_url=None,
+        lifespan=lifespan,
+    )
     token = settings.token.encode()
     changes = asyncio.Lock()  # one container change at a time
 

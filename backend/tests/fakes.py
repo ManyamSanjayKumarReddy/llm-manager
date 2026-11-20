@@ -185,6 +185,7 @@ class Dispatch(httpx.AsyncBaseTransport):
         self._transports = {p: httpx.ASGITransport(app=a) for p, a in apps_by_port.items()}
         self._hosts: dict[str, httpx.ASGITransport] = {}
         self.down: set[int] = set()
+        self.seen: list[int] = []  # ports that were called directly (not through a tunnel)
 
     def add_host(self, host: str, app: FastAPI) -> None:
         """Serve ``https://<host>/...`` from ``app`` (a fake agent)."""
@@ -194,6 +195,8 @@ class Dispatch(httpx.AsyncBaseTransport):
         if request.url.host in self._hosts:
             return await self._hosts[request.url.host].handle_async_request(request)
         port = request.url.port
+        if port is not None:
+            self.seen.append(port)
         if port is None or port in self.down or port not in self._transports:
             raise httpx.ConnectError("connection refused", request=request)
         return await self._transports[port].handle_async_request(request)

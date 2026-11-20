@@ -6,7 +6,8 @@ from tortoise.exceptions import IntegrityError
 from tortoise.expressions import Q
 
 from llm_manager.core.errors import InvalidInputError, NotFoundError
-from llm_manager.core.models_config import ModelSpec
+from llm_manager.core.models_config import DEFAULT_SERVER, ModelSpec
+from llm_manager.core.routing import for_server
 from llm_manager.db.models import ManagedModel, Server
 from llm_manager.engine import Manager
 from llm_manager.schemas.models import ModelCheck, ModelCheckRequest, ModelCreate, ModelUpdate
@@ -202,7 +203,10 @@ class ModelService:
         async def get(path: str) -> httpx.Response | None:
             try:
                 return await self._http.get(
-                    f"{spec.url}{path}", headers=headers, timeout=_PROBE_TIMEOUT_S
+                    f"{spec.url}{path}",
+                    headers=headers,
+                    timeout=_PROBE_TIMEOUT_S,
+                    extensions=for_server(body.server or DEFAULT_SERVER),
                 )
             except httpx.HTTPError:
                 return None

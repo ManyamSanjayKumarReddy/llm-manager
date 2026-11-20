@@ -1,9 +1,10 @@
 import { useState } from "react";
 
 import { api } from "../../api/client";
-import { Icon } from "../../components/Icon";
+import { CopyButton } from "../../components/CopyButton";
 import { Alert, PageHead, Pill } from "../../components/ui";
 import { useAsync } from "../../hooks/useAsync";
+import { useCopy } from "../../hooks/useCopy";
 import { Link } from "../../router/Link";
 import { useUser } from "../auth/context";
 
@@ -37,30 +38,6 @@ console.log(reply.choices[0].message.content);`,
 
 type Language = keyof typeof SNIPPETS;
 const LANGUAGES: readonly (readonly [Language, string])[] = [["curl", "curl"], ["python", "Python"], ["javascript", "JavaScript"]];
-
-/** Copies text and says so for two seconds. Browsers may block the clipboard: the text stays selectable. */
-function useCopy(): [boolean, (text: string) => Promise<void>] {
-  const [copied, setCopied] = useState(false);
-  async function copy(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
-    } catch {
-      // clipboard blocked: nothing to do
-    }
-  }
-  return [copied, copy];
-}
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, copy] = useCopy();
-  return (
-    <button type="button" className="btn small" onClick={() => void copy(value)} aria-label={`Copy ${label}`}>
-      <Icon name="copy" size={14} /> {copied ? "Copied" : "Copy"}
-    </button>
-  );
-}
 
 /** What a program needs to call Wakeful: the base URL, an API key, and a model name. */
 export function Connect() {

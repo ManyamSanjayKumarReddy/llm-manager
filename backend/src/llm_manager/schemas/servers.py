@@ -72,6 +72,19 @@ class ServerOut(ResponseSchema):
     gpu_count: int
     gpu_type: str | None
     agent_url: str | None
-    has_agent: bool = Field(description="an agent address and token are stored (token never shown)")
+    has_agent: bool = Field(
+        description="an agent can be reached: address and token stored, or one connected out"
+    )
+    tunnel: bool = Field(description="its agent connects out to Wakeful (token issued)")
+    tunnel_connected: bool = Field(description="that agent is connected right now")
+    tunnel_last_seen: datetime | None = Field(description="when it was last connected")
+    tunnel_agent_version: str | None
     models: list[str]
     created_at: datetime
+
+
+class TunnelEnrolled(ResponseSchema):
+    """The enrollment token of a server whose agent connects out. Shown once."""
+
+    token: str = Field(description="give this to the agent as AGENT_CONNECT_TOKEN")
+    connect_path: str = Field(description="the agent connects to wss://<this site><connect_path>")

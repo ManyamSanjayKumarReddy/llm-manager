@@ -76,7 +76,7 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
   async function runCheck() {
     setBusy("check");
     try {
-      setCheck(await api.checkModel({ url, served_name: servedName, backend_api_key: form.apiKey || null }));
+      setCheck(await api.checkModel({ url, server: form.server, served_name: servedName, backend_api_key: form.apiKey || null }));
     } catch (err) {
       toast.show("error", err instanceof Error ? err.message : "The check failed.");
     }
@@ -187,7 +187,9 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
               <GpuPicker count={chosen?.gpu_count ?? 0} value={form.gpus} onChange={(gpus) => { set({ gpus }); }} />
             </div>
             {form.gpus.length > 1 ? <p className="hint dim">The model is split across {form.gpus.length} GPUs; the command includes it.</p> : null}
-            {servers.length > 1 ? (
+            {chosen?.tunnel ? (
+              <p className="hint dim">{chosen.name} connects out to Wakeful, so the container&rsquo;s address is the one on that machine (<code>http://127.0.0.1:{form.port}</code>). Wakeful reaches it through the agent.</p>
+            ) : servers.length > 1 ? (
               <p className="hint dim">Wakeful reaches the container at the address on the Advanced step. It starts as this machine; for another server, enter that server's address there.</p>
             ) : null}
             {sharing.length > 0 ? (

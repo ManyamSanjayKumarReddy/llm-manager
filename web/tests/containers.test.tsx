@@ -50,7 +50,7 @@ describe("Containers on a server", () => {
     });
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("button", { name: "Set up agent" }));
+    await user.click(await screen.findByRole("button", { name: "Use an address" }));
     const dialog = await screen.findByRole("dialog", { name: "Agent settings" });
     const save = within(dialog).getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();

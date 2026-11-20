@@ -14,6 +14,7 @@ from llm_manager.api.container import build_container
 from llm_manager.api.errors import register_exception_handlers
 from llm_manager.api.middleware import OriginCheckMiddleware, SecurityHeadersMiddleware
 from llm_manager.api.routers import (
+    agent_connect,
     api_keys,
     auth,
     containers,
@@ -31,11 +32,13 @@ from llm_manager.core.logging import configure_logging, keep_query_parameters_ou
 from llm_manager.core.models_config import EngineConfig
 from llm_manager.core.settings import Settings, get_settings
 from llm_manager.db.config import build_tortoise_config
+from llm_manager.db.models import Server
 from llm_manager.engine import Manager
 from llm_manager.engine.backend import VllmBackend
 from llm_manager.services.maintenance import run_maintenance
 from llm_manager.services.models import ModelStore
 from llm_manager.services.scheduler_settings import stored_engine_config
+from llm_manager.services.tunnel import Hub, TunnelRouter
 
 _CONNECT_TIMEOUT_S = 5.0
 _WRITE_TIMEOUT_S = 30.0
@@ -58,6 +61,7 @@ def create_app(
     engine_config: EngineConfig | None = None,
     *,
     http_client: httpx.AsyncClient | None = None,
+    hub: Hub | None = None,
     manage_orm: bool = True,
 ) -> FastAPI:
     """Build the application.
@@ -66,6 +70,7 @@ def create_app(
         settings: Security and infrastructure settings.
         engine_config: Scheduler timings (tests); by default the saved ones, else ``settings``.
         http_client: Client used to reach the vLLM containers (tests inject a fake).
+        hub: Holds the connections of agents that dial in (tests inject one their client uses).
         manage_orm: Connect to the database at startup. Tests that already did pass False.
     """
     keep_query_parameters_out_of_logs()
@@ -77,12 +82,17 @@ def create_app(
                 await stack.enter_async_context(
                     RegisterTortoise(app, config=build_tortoise_config(settings.database_url))
                 )
+            tunnels = hub or Hub()
+            tunnels.set_tunneled(
+                {row.name for row in await Server.filter(tunnel_token_hash__not_isnull=True)}
+            )
             http = http_client
             if http is None:
                 http = httpx.AsyncClient(
+                    transport=TunnelRouter(tunnels, httpx.AsyncHTTPTransport()),
                     timeout=httpx.Timeout(
                         connect=_CONNECT_TIMEOUT_S, read=None, write=_WRITE_TIMEOUT_S, pool=None
-                    )
+                    ),
                 )
                 stack.push_async_callback(http.aclose)
             # Admins change the timings in the dashboard; they win over the environment.
@@ -96,9 +106,20 @@ def create_app(
             # Models are registered in the dashboard and kept in the database.
             models = await ModelStore.specs()
             container = build_container(
-                settings, Manager(timings, backend, models, starting=True), http
+                settings, Manager(timings, backend, models, starting=True), http, tunnels
             )
             app.state.container = container
+            refreshes: set[asyncio.Task[None]] = set()
+
+            def agent_connected(server: str) -> None:
+                """Look at the server's models at once: they were unreachable until now."""
+                for model in container.manager.models.values():
+                    if model.spec.server == server:
+                        task = asyncio.create_task(container.manager.refresh(model.name))
+                        refreshes.add(task)
+                        task.add_done_callback(refreshes.discard)
+
+            tunnels.on_connected = agent_connected
             container.manager.event_sink = container.recorder.record_event
 
             background = [
@@ -131,6 +152,7 @@ def create_app(
     register_exception_handlers(app)
     for module in (
         health,
+        agent_connect,
         auth,
         users,
         api_keys,

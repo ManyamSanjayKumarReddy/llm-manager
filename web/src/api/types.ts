@@ -120,9 +120,23 @@ export interface Server {
   agent_url: string | null;
   /** An agent address and token are stored (the token itself is never sent back). */
   has_agent: boolean;
+  /** Its agent connects out to Wakeful (a connection token was issued). */
+  tunnel: boolean;
+  /** That agent is connected right now. */
+  tunnel_connected: boolean;
+  /** When it was last connected (null: never). */
+  tunnel_last_seen: string | null;
+  tunnel_agent_version: string | null;
   /** Names of the models placed on it. */
   models: string[];
   created_at: string;
+}
+
+/** The token an agent uses to connect out. Shown once, when it is created. */
+export interface TunnelEnrolled {
+  token: string;
+  /** The agent connects to wss://<this site><connect_path>. */
+  connect_path: string;
 }
 
 /** A model the router manages, with its live state. */

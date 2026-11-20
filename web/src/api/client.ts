@@ -21,6 +21,7 @@ import type {
   SchedulerSettings,
   SchedulerValues,
   Server,
+  TunnelEnrolled,
   SessionInfo,
   StatusData,
   Usage,
@@ -155,6 +156,8 @@ export const api = {
   updateServer: (name: string, changes: { gpu_count?: number; gpu_type?: string; agent_url?: string; agent_token?: string }) =>
     request<Server>("PATCH", `/api/servers/${id(name)}`, changes),
   removeServer: (name: string) => send("DELETE", `/api/servers/${id(name)}`),
+  enrollTunnel: (name: string) => request<TunnelEnrolled>("POST", `/api/servers/${id(name)}/tunnel`),
+  revokeTunnel: (name: string) => request<Server>("DELETE", `/api/servers/${id(name)}/tunnel`),
 
   hostStats: (server: string) => request<HostStats>("GET", `/api/servers/${id(server)}/host`),
   containers: (server: string, q: ListQuery) => request<Page<Container>>("GET", `/api/servers/${id(server)}/containers${query(q)}`),
@@ -175,7 +178,7 @@ export const api = {
     request<ManagedModel>("PATCH", `/api/models/${id(name)}`, changes),
   sleepModel: (name: string) => send("POST", `/api/models/${id(name)}/sleep`),
   removeModel: (name: string) => send("DELETE", `/api/models/${id(name)}`),
-  checkModel: (check: { url: string; served_name: string | null; backend_api_key: string | null }) =>
+  checkModel: (check: { url: string; server?: string; served_name: string | null; backend_api_key: string | null }) =>
     request<ModelCheck>("POST", "/api/models/check", check),
 
   keys: (q: ListQuery & { q?: string; status?: string }) => request<Page<ApiKey>>("GET", `/api/keys${query(q)}`),

@@ -165,6 +165,10 @@ class Server(Model):
     agent_url = fields.CharField(max_length=300, null=True)
     # The agent's bearer token. Sent as-is, so it cannot be hashed; the API never returns it.
     agent_token: str | None = fields.TextField(null=True)
+    # Servers whose agent connects out (no open port needed): SHA-256 of its enrollment token.
+    # While set, every call to the server goes down that connection instead of to an address.
+    tunnel_token_hash = fields.CharField(max_length=64, null=True, unique=True)
+    tunnel_last_seen = fields.DatetimeField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:

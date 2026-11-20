@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from llm_manager.core.errors import InvalidInputError, NotFoundError, UnavailableError
+from llm_manager.core.routing import for_server
 from llm_manager.db.models import Server
 
 _READ_TIMEOUT_S = 15.0
@@ -21,18 +22,29 @@ def _detail(response: httpx.Response) -> str:
     return text if isinstance(text, str) else f"the agent answered {response.status_code}"
 
 
+_TUNNEL_BASE = "http://agent.tunnel.invalid"  # never looked up: the transport answers it
+
+
 class AgentClient:
-    """One server's agent: a base address and a bearer token."""
+    """One server's agent: reached by address and token, or through the connection it opened."""
 
     def __init__(self, http: httpx.AsyncClient, server: Server) -> None:
-        if not server.agent_url or not server.agent_token:
-            raise InvalidInputError(
-                f"{server.name} has no agent: add its address and token on the Servers page"
-            )
         self._http = http
         self._server = server.name
-        self._base = server.agent_url.rstrip("/")
-        self._headers = {"Authorization": f"Bearer {server.agent_token}"}
+        self._extensions: dict[str, object] = {}
+        if server.tunnel_token_hash:
+            # The agent dialled in; the shared client's transport finds its connection by name.
+            self._base = _TUNNEL_BASE
+            self._headers: dict[str, str] = {}
+            self._extensions = for_server(server.name, "agent")
+        elif server.agent_url and server.agent_token:
+            self._base = server.agent_url.rstrip("/")
+            self._headers = {"Authorization": f"Bearer {server.agent_token}"}
+        else:
+            raise InvalidInputError(
+                f"{server.name} has no agent: add its address and token on the Servers page, "
+                "or connect one"
+            )
 
     async def call(
         self,
@@ -52,11 +64,14 @@ class AgentClient:
                 json=json,
                 params=params,
                 timeout=_CHANGE_TIMEOUT_S if change else _READ_TIMEOUT_S,
+                extensions=self._extensions,
             )
         except httpx.HTTPError as error:
             raise UnavailableError(
                 f"cannot reach the agent on {self._server} ({type(error).__name__}): "
-                "is it running, and is the address right?",
+                "is it running, and is the address right?"
+                if not self._extensions
+                else f"the agent on {self._server} is not connected: is it running there?",
                 retry_after=_RETRY_AFTER_S,
             ) from error
         if response.is_success:

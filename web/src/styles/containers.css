@@ -15,3 +15,5 @@ pre.logs.wrap { white-space: pre-wrap; word-break: break-all; }
 dialog .actions .btn.spacer { margin-right: auto; }
 .start-choice { display: grid; gap: 8px; }
 @media (max-width: 640px) { .host-meter { grid-template-columns: 56px 1fr; } .host-meter-text { grid-column: 1 / -1; } }
+.connect-steps { margin: 12px 0; padding-left: 20px; display: grid; gap: 6px; color: var(--dim); font-size: 13px; }
+.connect-steps code { color: var(--bone); }

@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from llm_manager.api.deps import ContainerDep, PrincipalDep
 from llm_manager.core.errors import UnavailableError
+from llm_manager.core.routing import for_server
 from llm_manager.core.usage import JsonTail, SseUsage, TokenUsage, wants_stream_usage
 from llm_manager.services.recorder import RequestRecord
 
@@ -126,7 +127,11 @@ async def proxy(
         if model.spec.backend_key:
             headers["Authorization"] = f"Bearer {model.spec.backend_key}"
         upstream_request = container.http.build_request(
-            "POST", f"{model.spec.url.rstrip('/')}/v1/{path}", json=body, headers=headers
+            "POST",
+            f"{model.spec.url.rstrip('/')}/v1/{path}",
+            json=body,
+            headers=headers,
+            extensions=for_server(model.spec.server),
         )
         upstream = await stop.run(container.http.send(upstream_request, stream=True))
     except _StoppedError:

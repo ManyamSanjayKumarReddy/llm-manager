@@ -4,6 +4,18 @@ A small service that runs on a GPU server and lets Wakeful start, stop, restart,
 its vLLM containers, and read the server's GPU, memory and disk figures. It is optional: servers
 without an agent work exactly as before.
 
+There are two ways for Wakeful to reach the agent. Pick one per server.
+
+**A. The agent connects out (recommended, and the only option behind a firewall).** The agent dials
+Wakeful and keeps one WebSocket open; Wakeful sends its calls, and the users' requests to the
+server's models, down it. The server needs no open port, no certificate and no web-server rule.
+
+```
+agent on GPU server ──outbound wss──> Wakeful      (Wakeful's calls travel back down it)
+```
+
+**B. Wakeful calls in.** For servers Wakeful can reach directly (your own machines).
+
 ```
 Wakeful (opslocal) ──https + token──> Apache on the GPU server ──> agent (127.0.0.1:8050) ──> docker
 ```
@@ -30,7 +42,7 @@ Wakeful (opslocal) ──https + token──> Apache on the GPU server ──> a
 git clone <your repository URL> /opt/wakeful-agent
 cd /opt/wakeful-agent/agent && uv sync
 
-# 2. settings: a long random token, and where model files are kept
+# 2. settings: a long random token (only if Wakeful calls in; see below), and where model files are kept
 install -m 600 /dev/null /etc/wakeful-agent.env
 cat >> /etc/wakeful-agent.env <<ENV
 AGENT_TOKEN=$(openssl rand -hex 32)
@@ -52,7 +64,32 @@ Then expose it through the web server that already terminates TLS for this machi
 `deploy/apache-agent.conf.example`. Plain HTTP across the network is refused by Wakeful, because the
 token would travel in clear.
 
-## Connect it to Wakeful
+## Connect it to Wakeful: the agent dials out (A)
+
+In the dashboard open **Servers**, click *Connect agent* on the server, then *Create connection
+token*. It shows two lines, once:
+
+```
+AGENT_CONNECT_URL=wss://wakeful.example.com/api/agent/connect
+AGENT_CONNECT_TOKEN=wkt_...
+```
+
+On the GPU server put them in `/etc/wakeful-agent.env` (`AGENT_TOKEN` is then not needed: nobody can
+call the agent over HTTP), then `systemctl enable --now wakeful-agent`. The dialog shows when it
+connects. The agent reconnects by itself after any interruption.
+
+* Models registered on that server use the address **as seen from that server**, for example
+  `http://127.0.0.1:8025`. Wakeful reaches it through the agent.
+* Containers that were *not* created by Wakeful are only reachable if their port is listed in
+  `AGENT_RELAY_PORTS` (comma-separated). Containers created from the dashboard are allowed
+  automatically.
+* *New token* disconnects the agent that uses the old one; *Disconnect* cuts the server off.
+* Wakeful's own web server must pass WebSockets on `/api/agent/connect`: see
+  `deploy/apache-wakeful-connect.conf.example`. Run Wakeful as a single process (the connections
+  live in its memory).
+* The wire format is in [PROTOCOL.md](PROTOCOL.md).
+
+## Connect it to Wakeful: Wakeful calls in (B)
 
 Dashboard → **Servers** → *Set up agent* on that server: enter the address (for example
 `https://llm-demo.example.com/agent`) and the token. The row then shows the machine's free RAM and
@@ -76,7 +113,10 @@ Rules Wakeful adds on top:
 
 | Variable | Meaning |
 |---|---|
-| `AGENT_TOKEN` | required, at least 32 characters |
+| `AGENT_TOKEN` | at least 32 characters; needed for mode B, optional for mode A |
+| `AGENT_CONNECT_URL` | `wss://` address of Wakeful's `/api/agent/connect` (mode A) |
+| `AGENT_CONNECT_TOKEN` | the connection token the dashboard showed (mode A) |
+| `AGENT_RELAY_PORTS` | ports of vLLM containers not created by the agent that Wakeful may reach (mode A) |
 | `AGENT_CACHE_ROOTS` | comma-separated folders a container may mount (default `~/.cache`) |
 | `AGENT_IMAGES` | comma-separated allowed image repositories |
 | `AGENT_DOCKER_BIN` | docker command (default `docker`) |
@@ -92,7 +132,11 @@ new token under *Servers → Settings* in the dashboard.
 
 | Symptom in the dashboard | Cause |
 |---|---|
-| "Agent not reachable" | the service is down, or the web server rule is missing: `curl https://<host>/agent/healthz` |
+| "Agent not reachable" (mode B) | the service is down, or the web server rule is missing: `curl https://<host>/agent/healthz` |
+| "Not connected" (mode A) | the service is down, or cannot reach Wakeful: `journalctl -u wakeful-agent` or `/var/log/wakeful-agent/agent.log` shows why |
+| log: "Wakeful refused the connection (HTTP 403)" | the token is wrong or was revoked: create a new one |
+| log: "another agent connected with this token" | the agent runs twice with the same token |
+| "port N is not one of this agent's containers" | list the port in `AGENT_RELAY_PORTS` |
 | "the agent ... refused the token" | the token differs from `AGENT_TOKEN` on that machine |
 | "image ... is not on this server yet" | `docker pull` the image there first |
 | "cache folder: must be inside ..." | add the folder to `AGENT_CACHE_ROOTS` |

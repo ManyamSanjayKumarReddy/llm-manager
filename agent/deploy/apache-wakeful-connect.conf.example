@@ -1,0 +1,10 @@
+# On the machine that runs Wakeful (inside its TLS <VirtualHost>), next to the rules that already
+# send the dashboard and /v1 to Wakeful. Agents connect out to /api/agent/connect with a WebSocket.
+#
+# Needs: a2enmod proxy proxy_http proxy_wstunnel
+<Location "/api/agent/connect">
+    ProxyPass        "ws://127.0.0.1:8040/api/agent/connect"
+    ProxyPassReverse "ws://127.0.0.1:8040/api/agent/connect"
+    # The connection stays open for days; the agent pings it every 20 s.
+    ProxyTimeout 3600
+</Location>

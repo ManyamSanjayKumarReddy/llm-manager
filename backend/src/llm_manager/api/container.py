@@ -16,6 +16,7 @@ from llm_manager.services.scheduler_settings import SchedulerSettingsService
 from llm_manager.services.servers import ServerService
 from llm_manager.services.sessions import SessionService
 from llm_manager.services.stats import StatsService
+from llm_manager.services.tunnel import Hub
 from llm_manager.services.usage import UsageService
 from llm_manager.services.users import UserService
 
@@ -27,6 +28,7 @@ class Container:
     settings: Settings
     manager: Manager
     http: httpx.AsyncClient
+    hub: Hub
     audit: AuditService
     sessions: SessionService
     login: LoginService
@@ -41,7 +43,9 @@ class Container:
     recorder: Recorder
 
 
-def build_container(settings: Settings, manager: Manager, http: httpx.AsyncClient) -> Container:
+def build_container(
+    settings: Settings, manager: Manager, http: httpx.AsyncClient, hub: Hub
+) -> Container:
     """Wire the services together."""
     audit = AuditService()
     models = ModelService(manager, audit, http)
@@ -50,11 +54,12 @@ def build_container(settings: Settings, manager: Manager, http: httpx.AsyncClien
         settings=settings,
         manager=manager,
         http=http,
+        hub=hub,
         audit=audit,
         sessions=sessions,
         login=LoginService(settings, sessions, audit),
         users=UserService(settings, audit, sessions),
-        servers=ServerService(audit),
+        servers=ServerService(audit, hub),
         models=models,
         containers=ContainerService(manager, models, audit, http),
         api_keys=ApiKeyService(audit),

@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.14.3",
     "pydantic-settings>=2.16.2",
     "uvicorn>=0.54.0",
+    "websockets>=17.4",
 ]
 
 [build-system]

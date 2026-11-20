@@ -69,6 +69,9 @@ class ModelCheckRequest(RequestSchema):
     """Where to look for a container, before registering it."""
 
     url: ModelUrl
+    server: ServerName | None = Field(
+        None, description="the server it runs on; matters for servers that connect out"
+    )
     served_name: str | None = Field(None, max_length=200)
     backend_api_key: ApiKeyText | None = None
 

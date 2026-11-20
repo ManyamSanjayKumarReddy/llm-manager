@@ -24,6 +24,7 @@ from llm_manager.core.models_config import EngineConfig
 from llm_manager.core.settings import Settings
 from llm_manager.db.models import ManagedModel, Role, Server, User
 from llm_manager.main import create_app
+from llm_manager.services.tunnel import Hub, TunnelRouter
 from tests.fakes import Dispatch, FakeVLLM, Ledger
 
 GPUS = {
@@ -121,6 +122,7 @@ class Stack:
     fakes: dict[str, FakeVLLM]
     ledger: Ledger
     dispatch: Dispatch
+    hub: Hub
     _clients: list[httpx.AsyncClient] = field(default_factory=list)
 
     def anonymous(self) -> httpx.AsyncClient:
@@ -237,12 +239,13 @@ async def make_stack(db: None, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator
             _env_file=None, database_url="unused", **cast("dict[str, Any]", settings_opts)
         )
         dispatch = Dispatch({PORTS[n]: f.app for n, f in fakes.items()})
-        backend = httpx.AsyncClient(transport=dispatch)
-        app = create_app(settings, config, http_client=backend, manage_orm=False)
+        hub = Hub()
+        backend = httpx.AsyncClient(transport=TunnelRouter(hub, dispatch))
+        app = create_app(settings, config, http_client=backend, hub=hub, manage_orm=False)
         lifespan = app.router.lifespan_context(app)
         await lifespan.__aenter__()
         await app.state.container.manager.wait_until_started()  # the server answers before this
-        stack = Stack(app, app.state.container, fakes, ledger, dispatch)
+        stack = Stack(app, app.state.container, fakes, ledger, dispatch, hub)
         cleanups.append((lifespan, stack))
         return stack
 
