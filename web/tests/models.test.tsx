@@ -181,7 +181,7 @@ describe("form problems", () => {
     expect(steps[1]?.[0]).toMatch(/API key/);
     expect(steps[2]?.[0]).toMatch(/Context length/);
     expect(steps[3]?.[0]).toMatch(/Sleep after idle/);
-    expect(steps[4]?.[0]).toMatch(/vLLM version/);
+    expect(steps[4]?.[0]).toMatch(/vLLM image/);
   });
 
   it("spots a name or port that is already taken", () => {

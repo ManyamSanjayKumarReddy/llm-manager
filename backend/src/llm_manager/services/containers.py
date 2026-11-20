@@ -111,7 +111,7 @@ class ContainerService:
         for secret in ("api_key", "hf_token"):
             if secret in payload:
                 payload[secret] = payload[secret].get_secret_value()
-        raw = await agent.call("POST", "/containers", json=payload, change=True)
+        raw = await agent.call("POST", "/containers", json=payload, change=True, long=True)
         await self._audit.record(
             actor,
             "container.create",

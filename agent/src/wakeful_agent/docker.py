@@ -36,6 +36,10 @@ class Docker(Protocol):
         """Whether the image is already on this server."""
         ...
 
+    async def pull(self, image: str) -> None:
+        """Download the image (it can be several gigabytes)."""
+        ...
+
     async def run(self, command: RunCommand) -> None:
         """Create and start a container."""
         ...
@@ -105,9 +109,10 @@ class CliDocker:
     def __init__(self, settings: Settings) -> None:
         self._bin = settings.docker_bin
         self._timeout = settings.command_timeout_s
+        self._pull_timeout = settings.pull_timeout_s
 
     async def _exec(
-        self, *args: str, env: dict[str, str] | None = None
+        self, *args: str, env: dict[str, str] | None = None, limit_s: float | None = None
     ) -> tuple[int, bytes, bytes]:
         full_env = {**os.environ, **(env or {})}
         try:
@@ -121,15 +126,17 @@ class CliDocker:
         except OSError as error:
             raise AgentError(f"cannot run '{self._bin}': {error}", 503) from error
         try:
-            out, err = await asyncio.wait_for(proc.communicate(), self._timeout)
+            out, err = await asyncio.wait_for(proc.communicate(), limit_s or self._timeout)
         except TimeoutError:
             proc.kill()
             await proc.wait()
             raise AgentError("docker took too long to answer", 504) from None
         return proc.returncode or 0, out, err
 
-    async def _ok(self, *args: str, env: dict[str, str] | None = None) -> bytes:
-        code, out, err = await self._exec(*args, env=env)
+    async def _ok(
+        self, *args: str, env: dict[str, str] | None = None, limit_s: float | None = None
+    ) -> bytes:
+        code, out, err = await self._exec(*args, env=env, limit_s=limit_s)
         if code != 0:
             message = err.decode(errors="replace").strip()[:_MAX_ERROR_CHARS]
             raise AgentError(f"docker {args[0]} failed: {message or 'no details'}", 502)
@@ -164,9 +171,31 @@ class CliDocker:
         code, _, _ = await self._exec("image", "inspect", image)
         return code == 0
 
+    async def pull(self, image: str) -> None:
+        """``docker pull``; the image was checked against the allowlist before it got here."""
+        try:
+            await self._ok("pull", "--quiet", image, limit_s=self._pull_timeout)
+        except AgentError as error:
+            raise AgentError(
+                f"{error.message} (if '{image}' is an image you build on this server, build it "
+                "there first)",
+                error.status,
+            ) from error
+
     async def run(self, command: RunCommand) -> None:
         """``docker run -d`` with the secrets in the process environment."""
-        await self._ok(*command.argv, env=command.env)
+        try:
+            await self._ok(*command.argv, env=command.env)
+        except AgentError as error:
+            if "is already in use" not in error.message:
+                raise
+            name = command.argv[command.argv.index("--name") + 1]
+            raise AgentError(
+                f"a container called '{name}' already exists on this server but was not created "
+                f"by Wakeful (for example a stopped one from an earlier manual try). Remove it "
+                f"there with 'docker rm -f {name}', or choose another name",
+                409,
+            ) from error
 
     async def _on(self, verb: str, name: str, *extra: str) -> None:
         await self.get(name)  # refuses anything this agent did not create

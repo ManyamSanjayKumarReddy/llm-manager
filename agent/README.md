@@ -31,8 +31,9 @@ Wakeful (opslocal) ──https + token──> Apache on the GPU server ──> a
   build), the model cache must be inside `AGENT_CACHE_ROOTS`, ports are published on `127.0.0.1`
   only, and flags the agent sets itself (`--host`, `--port`, `--api-key`, `--trust-remote-code`,
   ...) cannot be repeated.
-- It never pulls images. The image must already be on the server (`docker pull ...` or
-  `scripts/vllm-abort-sleep`), otherwise creating answers "image is not on this server yet".
+- When a container is created and its image is not on the server yet, the agent downloads it
+  (`docker pull`, only for the allowlisted repositories, up to `AGENT_PULL_TIMEOUT_S`, 30 minutes).
+  The patched build `vllm-openai` is built on the server (`scripts/vllm-abort-sleep`), not downloaded.
 - Every action is recorded in Wakeful's audit trail.
 
 ## Install with one command (recommended)
@@ -153,6 +154,7 @@ Rules Wakeful adds on top:
 | `AGENT_DOCKER_BIN` | docker command (default `docker`) |
 | `AGENT_NVIDIA_SMI_BIN` | nvidia-smi command (default `nvidia-smi`) |
 | `AGENT_COMMAND_TIMEOUT_S` | longest one docker command may take (default 60) |
+| `AGENT_PULL_TIMEOUT_S` | longest downloading a missing image may take (default 1800) |
 
 ## Rotate the token
 
@@ -169,7 +171,7 @@ new token under *Servers → Settings* in the dashboard.
 | log: "another agent connected with this token" | the agent runs twice with the same token |
 | "port N is not one of this agent's containers" | list the port in `AGENT_RELAY_PORTS` |
 | "the agent ... refused the token" | the token differs from `AGENT_TOKEN` on that machine |
-| "image ... is not on this server yet" | `docker pull` the image there first |
+| "docker pull failed ..." when creating | the image name or tag is wrong, the disk is full, or (for a locally built image such as `vllm-openai`) it has not been built on that server |
 | "cache folder: must be inside ..." | add the folder to `AGENT_CACHE_ROOTS` |
 | "image: only these repositories ..." | add the repository to `AGENT_IMAGES` |
 

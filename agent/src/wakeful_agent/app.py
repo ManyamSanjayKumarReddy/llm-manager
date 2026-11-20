@@ -94,23 +94,32 @@ def create_app(settings: Settings, docker: Docker, host: Host) -> FastAPI:
     async def get_container(name: str) -> ContainerOut:
         return await docker.get(name)
 
+    async def _ensure_unused(name: str) -> None:
+        try:
+            await docker.get(name)
+        except NotFoundError:
+            return
+        raise AgentError(f"a container called '{name}' already exists", 409)
+
     @app.post("/containers", dependencies=auth, status_code=status.HTTP_201_CREATED)
     async def create_container(spec: ContainerSpec) -> ContainerOut:
         command = build_run(spec, settings)
+        await _ensure_unused(spec.name)
+        if not await docker.image_present(spec.image):
+            # Not under the lock: downloading can take minutes and must not hold up other changes.
+            log.info("downloading image %s for %s", spec.image, spec.name)
+            await docker.pull(spec.image)
         async with changes:
+            await _ensure_unused(spec.name)
             try:
-                await docker.get(spec.name)
-            except NotFoundError:
-                pass
-            else:
-                raise AgentError(f"a container called '{spec.name}' already exists", 409)
-            if not await docker.image_present(spec.image):
-                raise AgentError(
-                    f"image {spec.image} is not on this server yet: run 'docker pull "
-                    f"{spec.image}' there first",
-                    409,
-                )
-            await docker.run(command)
+                await docker.run(command)
+            except AgentError:
+                # Docker may leave a half-made container behind (for example when the GPU driver
+                # is missing); it would block the next try with "already exists". Only a container
+                # this agent manages can be removed, so a name taken by someone else is left alone.
+                with contextlib.suppress(AgentError):
+                    await docker.remove(spec.name)
+                raise
             log.info("created container %s (%s) on port %s", spec.name, spec.image, spec.port)
         return await docker.get(spec.name)
 

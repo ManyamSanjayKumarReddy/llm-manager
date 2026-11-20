@@ -40,6 +40,9 @@ export interface CommandLine {
 
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const HF_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
+/** The vLLM build whose /sleep aborts running requests (backend setting VLLM_IMAGE has the same default). */
+export const DEFAULT_VLLM_IMAGE = "mockdigilabs/vllm-openai-abortsleep-0.10.1:latest";
+
 const TAG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 // A full image reference such as vllm-openai:v0.10.1-abortsleep (a locally built image).
 const IMAGE_REF = /^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -56,7 +59,7 @@ export function vllmProblems(p: VllmParams): string[] {
   if (!NAME.test(p.containerName)) problems.push("Name: letters, digits, dot, dash or underscore.");
   if (!Number.isInteger(p.port) || p.port < 1024 || p.port > 65535) problems.push("Port: a number from 1024 to 65535.");
   if (p.gpus.length === 0) problems.push("Choose at least one GPU.");
-  if (!TAG.test(p.imageTag) && !IMAGE_REF.test(p.imageTag)) problems.push("vLLM version: a tag such as v0.10.1, or a full image such as vllm-openai:v0.10.1-abortsleep.");
+  if (!TAG.test(p.imageTag) && !IMAGE_REF.test(p.imageTag)) problems.push("vLLM image: a full image such as mockdigilabs/vllm-openai-abortsleep-0.10.1:latest, or just a tag such as v0.10.1.");
   if (!PATH.test(p.cacheDir)) problems.push("Model cache folder: a path such as ~/.cache/huggingface (no spaces).");
   if (p.apiKey !== "" && !isSecretText(p.apiKey)) problems.push("API key: one line, no spaces, up to 512 characters.");
   if (p.hfToken !== "" && !isSecretText(p.hfToken)) problems.push("Hugging Face token: one line, no spaces.");

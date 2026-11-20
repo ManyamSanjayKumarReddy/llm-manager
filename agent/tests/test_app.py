@@ -102,14 +102,62 @@ async def test_a_name_used_by_another_container_is_reported_by_docker(
     assert response.status_code == 502
 
 
-async def test_the_image_must_already_be_on_the_server(
+async def test_a_missing_image_is_downloaded_first(
     client: httpx.AsyncClient, cache_root: Path, docker: FakeDocker
 ) -> None:
     docker.images.clear()
     response = await client.post("/containers", json=body(cache_root))
-    assert response.status_code == 409
-    assert "docker pull vllm/vllm-openai:v0.10.1" in response.json()["detail"]
+    assert response.status_code == 201
+    assert docker.pulls == ["vllm/vllm-openai:v0.10.1"]
+    assert len(docker.runs) == 1
+
+
+async def test_an_image_already_there_is_not_downloaded_again(
+    client: httpx.AsyncClient, cache_root: Path, docker: FakeDocker
+) -> None:
+    response = await client.post("/containers", json=body(cache_root))
+    assert response.status_code == 201
+    assert docker.pulls == []
+
+
+async def test_a_failed_download_is_reported_and_creates_nothing(
+    client: httpx.AsyncClient, cache_root: Path, docker: FakeDocker
+) -> None:
+    docker.images.clear()
+    docker.unpullable.add("vllm/vllm-openai:v0.10.1")
+    response = await client.post("/containers", json=body(cache_root))
+    assert response.status_code == 502
+    assert "docker pull failed" in response.json()["detail"]
     assert docker.runs == []
+
+
+async def test_a_container_docker_could_not_start_is_cleaned_up(
+    client: httpx.AsyncClient, cache_root: Path, docker: FakeDocker
+) -> None:
+    docker.run_fails_after_creating = True
+    failed = await client.post("/containers", json=body(cache_root))
+    assert failed.status_code == 502
+    assert docker.containers == {}  # nothing half-made is left to block the next try
+    docker.run_fails_after_creating = False
+    assert (await client.post("/containers", json=body(cache_root))).status_code == 201
+
+
+async def test_a_name_used_by_someone_else_is_never_removed(
+    client: httpx.AsyncClient, cache_root: Path, docker: FakeDocker
+) -> None:
+    response = await client.post("/containers", json=body(cache_root, name="production-db"))
+    assert response.status_code == 502
+    assert ("remove", "production-db") not in docker.calls
+
+
+async def test_a_taken_name_is_refused_before_anything_is_downloaded(
+    client: httpx.AsyncClient, cache_root: Path, docker: FakeDocker
+) -> None:
+    assert (await client.post("/containers", json=body(cache_root))).status_code == 201
+    docker.images.clear()
+    again = await client.post("/containers", json=body(cache_root))
+    assert again.status_code == 409
+    assert docker.pulls == []
 
 
 async def test_rule_breaking_specs_never_reach_docker(

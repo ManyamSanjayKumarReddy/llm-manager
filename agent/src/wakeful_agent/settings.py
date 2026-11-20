@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     docker_bin: str = "docker"
     nvidia_smi_bin: str = "nvidia-smi"
     command_timeout_s: float = Field(60.0, gt=0, description="longest one docker command may take")
+    pull_timeout_s: float = Field(
+        1800.0, gt=0, description="longest downloading a missing vLLM image may take"
+    )
     max_gpus: int = Field(16, ge=1)
 
     @model_validator(mode="after")

@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 
 from wakeful_agent.docker import CliDocker
-from wakeful_agent.errors import NotFoundError
+from wakeful_agent.errors import AgentError, NotFoundError
 from wakeful_agent.settings import Settings
 from wakeful_agent.spec import RunCommand
 
@@ -96,4 +96,15 @@ async def test_a_container_without_the_label_is_untouchable(names: tuple[str, st
             await action(foreign)
     with pytest.raises(NotFoundError):
         await docker.logs(foreign, 5)
+    assert _docker("inspect", "--format", "{{.State.Running}}", foreign).stdout.strip() == "true"
+
+
+async def test_a_name_taken_by_an_unmanaged_container_is_explained(names: tuple[str, str]) -> None:
+    _, foreign = names
+    docker = CliDocker(Settings(token="t" * 40))
+    with pytest.raises(AgentError) as refused:
+        await docker.run(run_command(foreign))
+    assert refused.value.status == 409
+    assert "not created by Wakeful" in refused.value.message
+    assert f"docker rm -f {foreign}" in refused.value.message
     assert _docker("inspect", "--format", "{{.State.Running}}", foreign).stdout.strip() == "true"

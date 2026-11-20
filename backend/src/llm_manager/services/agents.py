@@ -10,8 +10,13 @@ from llm_manager.db.models import Server
 
 _READ_TIMEOUT_S = 15.0
 _CHANGE_TIMEOUT_S = 75.0  # stopping vLLM can take 30 s; removing and restarting add to that
+_CREATE_TIMEOUT_S = 1860.0  # creating may first download a multi-gigabyte image (agent: 30 min)
 _RETRY_AFTER_S = 10
 _SERVER_ERROR = 500
+
+
+def _timeout(*, change: bool, long: bool) -> float:
+    return _CREATE_TIMEOUT_S if long else _CHANGE_TIMEOUT_S if change else _READ_TIMEOUT_S
 
 
 def _detail(response: httpx.Response) -> str:
@@ -54,6 +59,7 @@ class AgentClient:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         change: bool = False,
+        long: bool = False,
     ) -> Any:
         """Call the agent and return its JSON (``None`` for an empty answer)."""
         try:
@@ -63,7 +69,7 @@ class AgentClient:
                 headers=self._headers,
                 json=json,
                 params=params,
-                timeout=_CHANGE_TIMEOUT_S if change else _READ_TIMEOUT_S,
+                timeout=_timeout(change=change, long=long),
                 extensions=self._extensions,
             )
         except httpx.HTTPError as error:

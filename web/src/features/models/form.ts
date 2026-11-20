@@ -1,5 +1,5 @@
 import type { ManagedModel } from "../../api/types";
-import { suggestName, vllmProblems, type VllmParams } from "../../lib/vllmCommand";
+import { DEFAULT_VLLM_IMAGE, suggestName, vllmProblems, type VllmParams } from "../../lib/vllmCommand";
 
 /** Everything typed into the Add model popup. Numbers stay as text until they are used. */
 export interface Form {
@@ -48,7 +48,7 @@ export const DEFAULTS: Form = {
   parserEdited: false,
   priority: "0",
   idle: "10",
-  imageTag: "v0.10.1",
+  imageTag: DEFAULT_VLLM_IMAGE,
   cacheDir: "~/.cache/huggingface",
   autoRestart: true,
   extraArgs: "",

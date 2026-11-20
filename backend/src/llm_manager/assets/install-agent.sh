@@ -10,6 +10,10 @@ set -euo pipefail
 
 CONNECT_URL="__CONNECT_URL__"
 IMAGE="${WAKEFUL_AGENT_IMAGE:-__AGENT_IMAGE__}"
+# The vLLM image models run in (the build that aborts requests when a model is put to sleep). It is
+# the only one the agent may start here, and it is downloaded once now so the first model starts fast.
+VLLM_IMAGE="${WAKEFUL_VLLM_IMAGE:-__VLLM_IMAGE__}"
+ALLOWED_IMAGES="${VLLM_IMAGE%:*},vllm-openai"
 NAME="wakeful-agent"
 CONF_DIR="/etc/wakeful-agent"
 ENV_FILE="$CONF_DIR/agent.env"
@@ -30,17 +34,19 @@ Wakeful agent installer
   --cache DIR[,DIR]    folders where model files live and containers may mount (default: the
                        ~/.cache of the sudo user and of root)
   --relay-ports P,P    ports of vLLM containers that Wakeful did not create but should reach
+  --no-download        do not download the vLLM image now (it is downloaded when a model is created)
   --remove             stop and remove the agent and its saved settings
   -h, --help           this text
 USAGE
 }
 
-token="" cache="" relay="" remove=0
+token="" cache="" relay="" remove=0 prefetch=1
 while [ $# -gt 0 ]; do
   case "$1" in
     wkt_*) token="$1" ;;
     --cache) [ $# -ge 2 ] || die "--cache needs a folder"; cache="$2"; shift ;;
     --relay-ports) [ $# -ge 2 ] || die "--relay-ports needs a list of ports"; relay="$2"; shift ;;
+    --no-download) prefetch=0 ;;
     --remove) remove=1 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
@@ -114,6 +120,7 @@ mkdir -p "$CONF_DIR"
   printf 'AGENT_CONNECT_URL=%s\n' "$CONNECT_URL"
   printf 'AGENT_CONNECT_TOKEN=%s\n' "$token"
   printf 'AGENT_CACHE_ROOTS=%s\n' "$cache"
+  printf 'AGENT_IMAGES=%s\n' "$ALLOWED_IMAGES"
   [ -z "$relay" ] || printf 'AGENT_RELAY_PORTS=%s\n' "$relay"
 } >"$ENV_FILE"
 chmod 600 "$ENV_FILE"
@@ -134,8 +141,15 @@ for _ in $(seq "$WAIT_S"); do
   logs="$(docker logs "$NAME" 2>&1 || true)"
   if grep -q "connected to Wakeful" <<<"$logs"; then
     say ""
-    say "Done. This server is connected to Wakeful ($CONNECT_URL)."
-    say "Go back to the dashboard: it shows 'Connected' and you can add models."
+    say "Connected: this server can now be managed from Wakeful ($CONNECT_URL)."
+    if [ "$prefetch" -eq 1 ]; then
+      say "Downloading the vLLM image $VLLM_IMAGE (several GB, only the first time) ..."
+      if ! docker pull "$VLLM_IMAGE"; then
+        warn "could not download $VLLM_IMAGE now; Wakeful will try again when you create a model."
+      fi
+    fi
+    say ""
+    say "Done. Go back to the dashboard: it shows 'Connected' and you can add models."
     say "Logs: docker logs -f $NAME      Update: run this command again      Remove: add --remove"
     exit 0
   fi

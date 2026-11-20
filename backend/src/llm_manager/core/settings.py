@@ -59,6 +59,12 @@ class Settings(BaseSettings):
         description="Docker image the install command pulls; set it to the one you published",
     )
 
+    vllm_image: str = Field(
+        "mockdigilabs/vllm-openai-abortsleep-0.10.1:latest",
+        description="vLLM image GPU servers use (the build whose /sleep aborts requests); the "
+        "install command lets the agent start only this repository and downloads it once",
+    )
+
     # Reverse proxy
     trust_proxy: bool = False  # take the client IP from X-Real-IP (only behind a proxy you control)
     allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)

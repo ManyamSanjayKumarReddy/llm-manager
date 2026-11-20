@@ -193,7 +193,7 @@ describe("Containers on a server", () => {
     await waitFor(() => { expect(calls.some((c) => c.key === "POST /api/servers/box/containers")).toBe(true); });
     const body = JSON.parse(calls.find((c) => c.key === "POST /api/servers/box/containers")?.init.body as string) as Record<string, unknown>;
     expect(body).toMatchObject({
-      name: "new-one", model: "openai/new-one", image: "vllm/vllm-openai:v0.10.1", port: 8025, gpus: [0],
+      name: "new-one", model: "openai/new-one", image: "mockdigilabs/vllm-openai-abortsleep-0.10.1:latest", port: 8025, gpus: [0],
       auto_restart: true, tool_calling: true, register_as: { name: "new-one", url: "http://127.0.0.1:8025", priority: 0, idle_minutes: 10 },
     });
     expect(calls.some((c) => c.key === "POST /api/models")).toBe(false); // the backend registers it, not the browser

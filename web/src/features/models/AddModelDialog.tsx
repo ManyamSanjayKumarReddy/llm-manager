@@ -257,7 +257,7 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
         {step === 4 ? (
           <>
             <div className="field-row">
-              <Field label="vLLM version">
+              <Field label="vLLM image">
                 <input className="input" type="text" spellCheck={false} value={form.imageTag} onChange={(e) => { set({ imageTag: e.target.value.trim() }); }} />
               </Field>
               <Field label="Model cache folder">
@@ -307,7 +307,7 @@ export function AddModelDialog({ registered, servers, onClose, onRegistered }: P
             <button type="button" className="btn" disabled={busy !== undefined || here.length > 0} onClick={() => void runCheck()}>{busy === "check" ? "Testing…" : "Test connection"}</button>
             <button type="button" className={`btn ${chosen?.has_agent ? "" : "primary"}`} disabled={busy !== undefined || here.length > 0} onClick={() => void register()}>{busy === "register" ? "Registering…" : "Register model"}</button>
             {chosen?.has_agent ? (
-              <button type="button" className="btn primary" disabled={busy !== undefined || here.length > 0} onClick={() => void createAndRegister()}>{busy === "create" ? "Creating…" : "Create and register"}</button>
+              <button type="button" className="btn primary" disabled={busy !== undefined || here.length > 0} onClick={() => void createAndRegister()}>{busy === "create" ? "Creating (may download the image)…" : "Create and register"}</button>
             ) : null}
           </>
         )}

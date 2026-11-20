@@ -13,6 +13,9 @@ class FakeDocker:
         self.containers: dict[str, ContainerOut] = {}
         self.foreign: set[str] = {"production-db", "other-vllm"}
         self.runs: list[RunCommand] = []
+        self.pulls: list[str] = []
+        self.run_fails_after_creating = False
+        self.unpullable: set[str] = set()
         self.calls: list[tuple[str, str]] = []
 
     def _managed(self, name: str) -> ContainerOut:
@@ -28,6 +31,12 @@ class FakeDocker:
 
     async def image_present(self, image: str) -> bool:
         return image in self.images
+
+    async def pull(self, image: str) -> None:
+        self.pulls.append(image)
+        if image in self.unpullable:
+            raise AgentError(f"docker pull failed: {image} not found", 502)
+        self.images.add(image)
 
     async def run(self, command: RunCommand) -> None:
         self.runs.append(command)
@@ -55,6 +64,8 @@ class FakeDocker:
             created_at="2026-11-17T00:00:00Z",
             started_at="2026-11-17T00:00:01Z",
         )
+        if self.run_fails_after_creating:  # docker made the container, then could not start it
+            raise AgentError("docker run failed: could not select device driver", 502)
 
     def _set(self, name: str, running: bool) -> None:
         old = self._managed(name)

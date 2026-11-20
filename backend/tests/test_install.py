@@ -23,7 +23,8 @@ async def test_the_script_needs_no_login_and_names_this_wakeful(make_stack: Stac
     assert 'CONNECT_URL="wss://wakeful.example.com/api/agent/connect"' in text
     assert "curl -fsSL https://wakeful.example.com/install-agent.sh" in text
     assert 'IMAGE="${WAKEFUL_AGENT_IMAGE:-wakeful/agent:latest}"' in text
-    for placeholder in ("__WAKEFUL_URL__", "__CONNECT_URL__", "__AGENT_IMAGE__"):
+    assert "${WAKEFUL_VLLM_IMAGE:-mockdigilabs/vllm-openai-abortsleep-0.10.1:latest}" in text
+    for placeholder in ("__WAKEFUL_URL__", "__CONNECT_URL__", "__AGENT_IMAGE__", "__VLLM_IMAGE__"):
         assert placeholder not in text
 
 
@@ -70,3 +71,17 @@ async def test_the_rendered_script_is_valid_shell(make_stack: StackFactory, tmp_
 
 def test_the_template_exists() -> None:
     assert _SCRIPT.is_file()
+
+
+async def test_the_vllm_image_comes_from_the_settings(make_stack: StackFactory) -> None:
+    stack = await make_stack(vllm_image="acme/vllm:1.0")
+    response = await stack.anonymous().get("/install-agent.sh", headers={"Host": "w.example.com"})
+    assert "acme/vllm:1.0" in response.text
+
+
+async def test_a_vllm_image_without_a_tag_is_not_put_into_the_script(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack(vllm_image="acme/vllm")
+    response = await stack.anonymous().get("/install-agent.sh", headers={"Host": "w.example.com"})
+    assert response.status_code == 500
