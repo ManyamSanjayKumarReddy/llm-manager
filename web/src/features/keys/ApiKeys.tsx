@@ -8,6 +8,7 @@ import { Reveal } from "../../components/Reveal";
 import { Deco } from "../../components/Stickers";
 import { Empty, Field, PageHead, Pill } from "../../components/ui";
 import { useAsync } from "../../hooks/useAsync";
+import { useHideRevoked } from "../../hooks/useHideRevoked";
 import { Pagination } from "../../components/Pagination";
 import { SearchBox } from "../../components/SearchBox";
 import { usePagedList } from "../../hooks/usePagedList";
@@ -15,30 +16,11 @@ import { ago } from "../../lib/format";
 import { Link } from "../../router/Link";
 import { useToast } from "../toast/context";
 
-const HIDE_REVOKED_KEY = "wakeful.keys.hideRevoked";
-
-function readHideRevoked(): boolean {
-  try {
-    return window.localStorage.getItem(HIDE_REVOKED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 export function ApiKeys() {
   const toast = useToast();
   const [search, setSearch] = useState("");
-  const [hideRevoked, setHideRevoked] = useState(readHideRevoked);
+  const [hideRevoked, changeHideRevoked] = useHideRevoked();
   const statusFilter = hideRevoked ? "active" : "";
-
-  function changeHideRevoked(on: boolean) {
-    setHideRevoked(on);
-    try {
-      window.localStorage.setItem(HIDE_REVOKED_KEY, on ? "1" : "0");
-    } catch {
-      // The choice just isn't remembered.
-    }
-  }
   const keys = usePagedList((q) => api.keys({ ...q, q: search, status: statusFilter }), { q: search, status: statusFilter });
   const filtered = search !== "" || statusFilter !== "";
   const models = useAsync(async () => Object.keys((await api.status()).models));

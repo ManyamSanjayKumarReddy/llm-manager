@@ -41,6 +41,7 @@ describe("Usage screen", () => {
   };
 
   beforeEach(() => {
+    window.localStorage.clear();
     visit("/usage");
     vi.stubGlobal("IntersectionObserver", class { observe() {} disconnect() {} unobserve() {} takeRecords() { return []; } });
     vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
@@ -70,6 +71,26 @@ describe("Usage screen", () => {
     // the chart is readable without a mouse
     expect(screen.getByRole("button", { name: "Nov 13: 10,500 tokens, 10 requests" })).toBeInTheDocument();
     expect(screen.getByText("Show as a table")).toBeInTheDocument();
+  });
+
+  it("hides revoked keys from the key table on request", async () => {
+    mockApi({
+      "GET /api/auth/me": () => ({ body: admin }),
+      "GET /api/status": () => ({ body: status }),
+      "GET /api/usage": () => ({ body: usage }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    const keys = (await screen.findByText("By API key")).closest("section") as HTMLElement;
+    expect(within(keys).getByText("beta")).toBeInTheDocument();
+
+    await user.click(within(keys).getByRole("switch", { name: "Hide revoked" }));
+    expect(within(keys).queryByText("beta")).not.toBeInTheDocument();
+    expect(within(keys).getByText("alpha")).toBeInTheDocument();
+    expect(within(keys).getByText("2 keys · 1 revoked hidden")).toBeInTheDocument();
+    // totals are unchanged: the revoked key's tokens still happened
+    expect(screen.getByText("Total tokens", { selector: ".label" }).closest(".stat")).toHaveTextContent("12K");
+    expect(window.localStorage.getItem("wakeful.keys.hideRevoked")).toBe("1");
   });
 
   it("changes the range and opens one key's usage", async () => {

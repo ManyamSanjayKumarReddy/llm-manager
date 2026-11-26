@@ -5,8 +5,10 @@ import type { UsageKey, UsageModel, UsageTotals } from "../../api/types";
 import { Modal, ModalHeader } from "../../components/Modal";
 import { Reveal } from "../../components/Reveal";
 import { Deco } from "../../components/Stickers";
+import { Switch } from "../../components/Controls";
 import { Alert, Empty, PageHead, Pill } from "../../components/ui";
 import { useAsync } from "../../hooks/useAsync";
+import { useHideRevoked } from "../../hooks/useHideRevoked";
 import { ago, compact, exact } from "../../lib/format";
 import { DailyChart, Legend } from "./UsageChart";
 
@@ -21,11 +23,14 @@ export function Usage() {
   const [days, setDays] = useState(30);
   const usage = useAsync(() => api.usage(days), 30_000, days);
   const [opened, setOpened] = useState<UsageKey>();
+  const [hideRevoked, setHideRevoked] = useHideRevoked();
   const data = usage.data;
   const used = data?.keys.filter((k) => k.requests > 0).length ?? 0;
   const errorRate = data && data.totals.requests > 0 ? (data.totals.errors / data.totals.requests) * 100 : 0;
   const nothingYet = data !== undefined && data.totals.requests === 0;
-  const biggest = Math.max(1, ...(data?.keys.map((k) => k.total_tokens) ?? []));
+  const shownKeys = data?.keys.filter((k) => !(hideRevoked && k.revoked)) ?? [];
+  const hiddenCount = (data?.keys.length ?? 0) - shownKeys.length;
+  const biggest = Math.max(1, ...shownKeys.map((k) => k.total_tokens));
 
   return (
     <div className="page">
@@ -76,13 +81,14 @@ export function Usage() {
 
           <Reveal>
             <section className="surface stack">
-              <div className="section-title"><h2>By API key</h2><span className="count">{data.keys.length} key{data.keys.length === 1 ? "" : "s"}</span></div>
-              {data.keys.length === 0 ? <p className="no-match">No API keys yet. Create one on the API keys page.</p> : (
+              <div className="section-title"><h2>By API key</h2><span className="count">{shownKeys.length} key{shownKeys.length === 1 ? "" : "s"}{hiddenCount > 0 ? ` · ${hiddenCount} revoked hidden` : ""}</span></div>
+              <div className="toolbar"><Switch checked={hideRevoked} onChange={setHideRevoked} label="Hide revoked" /></div>
+              {shownKeys.length === 0 ? <p className="no-match">{data.keys.length === 0 ? "No API keys yet. Create one on the API keys page." : "All keys are revoked. Turn off “Hide revoked” to see them."}</p> : (
                 <div className="table-wrap">
                   <table className="cards usage-table">
                     <thead><tr><th>Key</th><th className="num">Requests</th><th className="num">Prompt</th><th className="num">Completion</th><th className="num">Total tokens</th><th>Share</th><th>Last used</th></tr></thead>
                     <tbody>
-                      {data.keys.map((k) => (
+                      {shownKeys.map((k) => (
                         <tr key={k.id}>
                           <td className="primary">
                             <button type="button" className="row-open" onClick={() => { setOpened(k); }} aria-label={`Usage of ${k.label}`}>
