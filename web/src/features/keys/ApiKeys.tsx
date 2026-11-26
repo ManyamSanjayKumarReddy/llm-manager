@@ -2,6 +2,7 @@ import { useState, type SubmitEvent } from "react";
 
 import { api } from "../../api/client";
 import type { CreatedApiKey } from "../../api/types";
+import { Switch } from "../../components/Controls";
 import { Modal } from "../../components/Modal";
 import { Reveal } from "../../components/Reveal";
 import { Deco } from "../../components/Stickers";
@@ -14,10 +15,30 @@ import { ago } from "../../lib/format";
 import { Link } from "../../router/Link";
 import { useToast } from "../toast/context";
 
+const HIDE_REVOKED_KEY = "wakeful.keys.hideRevoked";
+
+function readHideRevoked(): boolean {
+  try {
+    return window.localStorage.getItem(HIDE_REVOKED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function ApiKeys() {
   const toast = useToast();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [hideRevoked, setHideRevoked] = useState(readHideRevoked);
+  const statusFilter = hideRevoked ? "active" : "";
+
+  function changeHideRevoked(on: boolean) {
+    setHideRevoked(on);
+    try {
+      window.localStorage.setItem(HIDE_REVOKED_KEY, on ? "1" : "0");
+    } catch {
+      // The choice just isn't remembered.
+    }
+  }
   const keys = usePagedList((q) => api.keys({ ...q, q: search, status: statusFilter }), { q: search, status: statusFilter });
   const filtered = search !== "" || statusFilter !== "";
   const models = useAsync(async () => Object.keys((await api.status()).models));
@@ -54,11 +75,7 @@ export function ApiKeys() {
           <div className="section-title"><h2>All keys</h2><span className="count">{keys.total} {filtered ? "match" : "total"}</span></div>
           <div className="toolbar">
             <SearchBox label="Search keys" placeholder="Search by label" value={search} onChange={setSearch} />
-            <select className="input" aria-label="Filter by status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}>
-              <option value="">All keys</option>
-              <option value="active">Active</option>
-              <option value="revoked">Revoked</option>
-            </select>
+            <Switch checked={hideRevoked} onChange={changeHideRevoked} label="Hide revoked" />
           </div>
           {keys.total === 0 && !keys.loading && filtered ? (
             <p className="no-match">No keys match your search.</p>

@@ -176,6 +176,31 @@ describe("api keys", () => {
     await waitFor(() => { expect(screen.queryByText("lm_secret-token-value")).not.toBeInTheDocument(); });
     expect(screen.getByText("lm_abcdefg…")).toBeInTheDocument();
   });
+
+  it("hides revoked keys on request and remembers the choice", async () => {
+    window.localStorage.clear();
+    const active = { ...created, id: "k1", label: "live-key", token: undefined };
+    const revoked = { ...created, id: "k2", label: "old-key", prefix: "lm_old", revoked_at: "2026-02-01T00:00:00Z", token: undefined };
+    const calls = mockApi({
+      ...base,
+      "GET /api/keys": (_, q) => ({ body: page(q.get("status") === "active" ? [active] : [active, revoked], q) }),
+    });
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    await openPage(user, "API keys");
+    expect(await screen.findByText("old-key")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("switch", { name: "Hide revoked" }));
+    await waitFor(() => { expect(screen.queryByText("old-key")).not.toBeInTheDocument(); });
+    expect(screen.getByText("live-key")).toBeInTheDocument();
+    expect(calls.some((c) => c.key === "GET /api/keys" && c.query.get("status") === "active")).toBe(true);
+
+    unmount();
+    render(<App />);
+    await openPage(user, "API keys");
+    expect(await screen.findByRole("switch", { name: "Hide revoked" })).toBeChecked();
+    window.localStorage.clear();
+  });
 });
 
 describe("users", () => {
