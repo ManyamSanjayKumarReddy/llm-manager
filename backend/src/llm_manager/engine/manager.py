@@ -57,6 +57,7 @@ _ABORT_SETTLE_S = 3.0  # least time between a cancelled request and /sleep (see 
 _CALIBRATE_GAP_S = 0.5  # before a stop: gap between the two counter readings
 _QUIET_S = 2.0  # the engine counts as stopped once it has processed no tokens for this long
 _QUIET_LIMIT_S = 20.0  # ... and a model still working after this long is left alone
+_FOUND_AWAKE = frozenset({"startup", "adopted"})  # sleeps of models we found awake, not served
 _ASLEEP_CHECK_S = 1.0  # a sleeping container is asked whether it is still there at most this often
 _DOWN_RETRIES = 2  # a failed check is repeated this many times before the model counts as down
 _DOWN_RETRY_GAP_S = 1.0  # ... this far apart (a loaded server can miss one answer)
@@ -199,6 +200,11 @@ class Manager:
 
     async def _go_to_sleep(self, model: ModelRuntime, reason: str) -> bool:
         """Sleep a model already marked SLEEPING. Returns True if it is now asleep."""
+        if reason in _FOUND_AWAKE:
+            # We did not start this model's work, so requests of an earlier router process may
+            # still be running in it (the connection is gone, vLLM has not noticed). Treat them
+            # like cancelled ones: prove the engine idle before its memory is freed.
+            model.aborted_at = max(model.aborted_at, time.monotonic())
         try:
             drained = await self._drain(model)
             await self._backend.sleep(model.spec)
@@ -229,7 +235,9 @@ class Manager:
             return ""
         if await self._backend.sleep_aborts_requests(model.spec):
             return "vLLM aborts leftover requests itself"
-        if model.counters_work:
+        if model.counters_work or (
+            model.counters_work is None and await self._backend.activity(model.spec) is not None
+        ):
             waited = await self._backend.wait_until_quiet(
                 model.spec, quiet_s=_QUIET_S, limit_s=_QUIET_LIMIT_S
             )
@@ -737,6 +745,7 @@ class Manager:
             counting_down = m.state is State.AWAKE and m.inflight == 0
             out[name] = ModelStatus(
                 server=m.spec.server,
+                container=m.spec.container,
                 state=m.shown_state,
                 detail=m.detail if m.state is State.DOWN else None,
                 priority=m.spec.priority,

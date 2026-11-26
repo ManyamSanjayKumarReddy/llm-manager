@@ -254,3 +254,52 @@ async def test_a_model_is_slept_without_delay_when_nothing_was_cancelled(
     assert (await stack.chat(token, "a")).status_code == 200  # swap: b finished normally
     assert time.monotonic() - started < 2.0
     assert stack.ledger.violations == []
+
+
+async def _restart_router_while_vllm_still_works(stack: object, model: str, busy_s: float) -> None:
+    """A deploy: the new router finds `model` awake, still working on a request of the old one."""
+    fake = stack.fakes[model]  # type: ignore[attr-defined]
+    stack.ledger.wake(model)  # type: ignore[attr-defined]
+    fake.sleeping = False
+    fake.ghost_until = time.monotonic() + busy_s  # the old router's request is still generating
+    await stack.container.manager.startup()  # type: ignore[attr-defined]
+
+
+async def test_a_restart_does_not_sleep_a_model_under_a_request_of_the_old_router(
+    make_stack: StackFactory,
+) -> None:
+    """vLLM keeps generating after the router that asked is gone; /sleep then kills the engine."""
+    stack = await make_stack()
+    await _restart_router_while_vllm_still_works(stack, "a", busy_s=1.0)
+    assert stack.ledger.violations == []
+    assert stack.fakes["a"].sleeping  # it did go to sleep, once the engine had stopped
+    assert "engine quiet after" in sleep_detail(stack, "a")
+
+
+async def test_a_restart_leaves_a_model_awake_while_its_engine_keeps_working(
+    make_stack: StackFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("llm_manager.engine.manager._QUIET_LIMIT_S", 0.6)
+    stack = await make_stack()
+    await _restart_router_while_vllm_still_works(stack, "a", busy_s=60)
+    assert stack.ledger.violations == []
+    assert not stack.fakes["a"].sleeping  # left awake; the idle check retries later
+    assert "sleep_failed" in kinds(stack)
+
+
+async def test_a_restart_needs_no_wait_when_vllm_aborts_on_sleep(make_stack: StackFactory) -> None:
+    stack = await make_stack()
+    stack.fakes["a"].version = "0.10.1+abortsleep"
+    await _restart_router_while_vllm_still_works(stack, "a", busy_s=60)
+    assert stack.ledger.violations == []
+    assert "aborts" in sleep_detail(stack, "a")
+
+
+async def test_a_restart_still_sleeps_a_model_whose_activity_cannot_be_read(
+    make_stack: StackFactory,
+) -> None:
+    stack = await make_stack()
+    stack.fakes["a"].metrics_enabled = False
+    await _restart_router_while_vllm_still_works(stack, "a", busy_s=0)
+    assert stack.fakes["a"].sleeping  # nothing to wait on: a fixed pause, as before
+    assert "fixed pause" in sleep_detail(stack, "a")
