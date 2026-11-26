@@ -13,6 +13,7 @@
 .model-note { margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
   color: var(--rose); background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.25); }
 .model-note.starting { color: var(--amber); background: rgba(255, 184, 77, 0.08); border-color: rgba(255, 184, 77, 0.28); }
+.model-actions { display: flex; justify-content: flex-end; }
 .models.in-group { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
 .server-group .model { background: rgba(255, 255, 255, 0.02); align-content: start; }
 

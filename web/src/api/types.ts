@@ -11,6 +11,8 @@ export interface SessionInfo {
 export interface ModelStatus {
   /** The server it runs on. */
   server?: string;
+  /** The container (on that server's agent) that runs it, if linked. */
+  container?: string | null;
   /** asleep | waking | awake | sleeping | starting | failed | down */
   state: string;
   /** Why it is starting or down, when its server's agent could tell. */

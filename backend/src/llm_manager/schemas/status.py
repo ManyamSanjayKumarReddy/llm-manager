@@ -11,6 +11,9 @@ class ModelStatus(ResponseSchema):
     """Live state and counters of one model (counters reset when the router restarts)."""
 
     server: str = Field(description="the server it runs on")
+    container: str | None = Field(
+        None, description="the container on that server's agent that runs it, if linked"
+    )
     state: str
     detail: str | None = Field(
         None, description="why a model is starting or down, when the server's agent could tell"

@@ -505,6 +505,7 @@ async def test_a_container_that_stopped_says_why_it_is_down(make_stack: StackFac
     status = (await client.get("/api/status")).json()["models"]["b"]
     assert status["state"] == "down"
     assert "Not enough free GPU memory" in status["detail"]
+    assert status["container"] == "vllm-b"  # the dashboard needs it to open the container's logs
 
 
 async def test_a_request_for_a_starting_model_says_it_is_loading(

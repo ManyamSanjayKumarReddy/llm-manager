@@ -1,13 +1,18 @@
+import { useState } from "react";
+
 import { api } from "../../api/client";
 import type { ModelStatus, StatusData } from "../../api/types";
 import { CountUp } from "../../components/CountUp";
 import { Reveal } from "../../components/Reveal";
 import { Deco } from "../../components/Stickers";
 import { Alert, Empty, PageHead, Pill } from "../../components/ui";
+import { Modal } from "../../components/Modal";
 import { useAsync } from "../../hooks/useAsync";
 import { clock, seconds } from "../../lib/format";
 import { Icon } from "../../components/Icon";
 import { Link } from "../../router/Link";
+import { useUser } from "../auth/context";
+import { LogsDialog } from "../servers/LogsDialog";
 
 const REFRESH_MS = 2000;
 
@@ -52,6 +57,8 @@ function groupByServer(data: StatusData): Group[] {
 function Content({ data }: { data: StatusData }) {
   const models = Object.entries(data.models);
   const groups = groupByServer(data);
+  const isAdmin = useUser().role === "admin";
+  const [logsOf, setLogsOf] = useState<{ server: string; container: string }>();
   const awake = models.filter(([, m]) => m.state === "awake").length;
   const requests = models.reduce((sum, [, m]) => sum + m.requests, 0);
   // GPUs are counted per server when the router says so, else from the flat list.
@@ -86,10 +93,14 @@ function Content({ data }: { data: StatusData }) {
       ) : (
         groups.map((group, i) => (
           <Reveal key={group.name} delay={i * 70}>
-            <ServerGroup group={group} />
+            <ServerGroup group={group} onLogs={isAdmin ? setLogsOf : undefined} />
           </Reveal>
         ))
       )}
+
+      <Modal open={logsOf !== undefined} onClose={() => { setLogsOf(undefined); }} label="Container logs" size="lg">
+        {logsOf ? <LogsDialog server={logsOf.server} name={logsOf.container} onClose={() => { setLogsOf(undefined); }} /> : null}
+      </Modal>
 
       <Reveal>
         <section className="surface stack">
@@ -121,7 +132,7 @@ function Content({ data }: { data: StatusData }) {
 }
 
 /** One server: its GPUs on top (who holds each), then its models. */
-function ServerGroup({ group }: { group: Group }) {
+function ServerGroup({ group, onLogs }: { group: Group; onLogs?: (target: { server: string; container: string }) => void }) {
   const used = group.gpus.filter((g) => g.model !== null).length;
   return (
     <section className="surface server-group" aria-label={`Server ${group.name}`}>
@@ -145,7 +156,7 @@ function ServerGroup({ group }: { group: Group }) {
         ) : null}
       </div>
       <div className="models in-group">
-        {group.models.map(([name, model]) => <ModelCard key={name} name={name} model={model} />)}
+        {group.models.map(([name, model]) => <ModelCard key={name} name={name} model={model} onLogs={onLogs} />)}
       </div>
     </section>
   );
@@ -160,7 +171,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function ModelCard({ name, model }: { name: string; model: ModelStatus }) {
+function ModelCard({ name, model, onLogs }: { name: string; model: ModelStatus; onLogs?: (target: { server: string; container: string }) => void }) {
   const awake = model.state === "awake";
   const idle = awake && model.inflight === 0 ? model.sleeps_in_s : null;
   return (
@@ -188,6 +199,13 @@ function ModelCard({ name, model }: { name: string; model: ModelStatus }) {
         <div><dt>Avg wake</dt><dd>{seconds(model.avg_wake_s)}</dd></div>
         <div><dt>Sleeps in</dt><dd>{idle == null ? "–" : seconds(idle)}</dd></div>
       </dl>
+      {onLogs && model.server && model.container ? (
+        <div className="model-actions">
+          <button type="button" className="btn small" aria-label={`Logs of ${name}`} onClick={() => { onLogs({ server: model.server as string, container: model.container as string }); }}>
+            <Icon name="terminal" size={14} /> Logs
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
